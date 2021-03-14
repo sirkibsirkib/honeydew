@@ -85,9 +85,34 @@ impl Direction {
 }
 
 impl RoomData {
-    fn coord_of_random_free_adjacent_to(&self, coord: Coord) -> Option<Coord> {}
+    fn dir_to_random_blocked_adjacent_to(
+        &self,
+        rng: &mut Rng,
+        src: Coord,
+    ) -> Option<(Direction, Coord)> {
+        let mut dirs = [Direction::Up, Direction::Down, Direction::Left, Direction::Right];
+        rng.shuffle(&mut dirs);
+        let steps_to_blocked = move |dir: Direction| {
+            if let Some(dest) = src.try_step(dir) {
+                if self.get_cell(dest).superset_of(RoomCellData::BLOCKED) {
+                    return Some((dir, dest));
+                }
+            }
+            None
+        };
+        dirs.iter().copied().filter_map(steps_to_blocked).next()
+    }
     fn get_mut_cell(&mut self, Coord([x, y]): Coord) -> &mut RoomCellData {
         &mut self.data[y as usize][x as usize]
+    }
+    fn get_cell(&self, Coord([x, y]): Coord) -> &RoomCellData {
+        &self.data[y as usize][x as usize]
+    }
+    fn update_cells_with_step(&mut self, src: Coord, dest: Coord, dir: Direction) {
+        use RoomCellData as Rcd;
+        let coord = if dir.crossed_wall_at_src() { src } else { dest };
+        let flags = Rcd::BLOCKED.with(if dir.horizontal() { Rcd::WALL_LE } else { Rcd::WALL_UP });
+        self.get_mut_cell(coord).remove(flags);
     }
     fn new(rng: &mut Rng) -> Self {
         use RoomCellData as Rcd;
@@ -96,37 +121,16 @@ impl RoomData {
         let mut at = Self::CENTER;
         let mut step_stack = Vec::<Direction>::with_capacity(64);
         loop {
-            // step stuff
-            if step_stack.is_empty() {
+            if let Some((dir, dest)) = me.dir_to_random_blocked_adjacent_to(rng, at) {
+                me.update_cells_with_step(at, dest, dir);
+                step_stack.push(dir);
+            } else if let Some(dir) = step_stack.pop() {
+                // backtrack
+                todo!()
+            } else {
                 break;
             }
         }
-
-        // let mut carvers_at: Vec<Coord> = vec![Self::CENTER];
-        // me.get_mut_cell(Self::CENTER).remove(Rcd::BLOCKED);
-        // for step in 0..64 {
-        //     if step % 8 == 0 {
-        //         // duplicate the most recent carver
-        //         carvers_at.push(*carvers_at.iter().last().unwrap());
-        //     }
-        //     // advance all carvers randomly
-        //     for carver_at in carvers_at.iter_mut() {
-        //         let dir = rng.gen_direction();
-        //         if let Some(dest) = carver_at.try_step(dir) {
-        //             // ok the carver can move that way.
-        //             {
-        //                 // remove the wall between src and dest cell
-        //                 let wall_coord = if dir.crossed_wall_at_src() { *carver_at } else { dest };
-        //                 let wall_flag = if dir.horizontal() { Rcd::WALL_LE } else { Rcd::WALL_UP };
-        //                 me.get_mut_cell(wall_coord).remove(wall_flag);
-        //             }
-        //             // remove the blockage at dest cell
-        //             me.get_mut_cell(dest).remove(Rcd::BLOCKED);
-        //             // update the carver's position
-        //             *carver_at = dest;
-        //         }
-        //     }
-        // }
         me
     }
     fn draw(&self) {
@@ -158,6 +162,9 @@ impl Rng {
             fastrand::Rng::new()
         };
         Self { fastrand_rng, cache: 0, cache_lsb_left: 0 }
+    }
+    fn shuffle<T>(&mut self, s: &mut [T]) {
+        self.fastrand_rng.shuffle(s)
     }
     fn take_cache_bits(&mut self, bits: u8) -> u32 {
         assert!(bits <= 32);
