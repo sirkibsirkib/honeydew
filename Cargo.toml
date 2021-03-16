@@ -8,5 +8,5 @@ edition = "2018"
 
 [dependencies]
 fastrand = "1.4.0"
-gfx_2020 = { path="./../gfx_2020" }
+gfx_2020 = { path="../gfx_2020" }
 gfx-backend-vulkan = "0.6.5"
