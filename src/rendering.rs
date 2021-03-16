@@ -1,13 +1,21 @@
 use {
     crate::{
-        room::{Coord, Room},
+        room::{Coord, Orientation, Room},
         GameState,
     },
-    gfx_2020::{gfx_hal::Backend, vert_coord_consts::UNIT_QUAD, *},
+    gfx_2020::{
+        gfx_hal::{window::Extent2D, Backend},
+        vert_coord_consts::UNIT_QUAD,
+        *,
+    },
 };
 
 pub fn render_config() -> RendererConfig<'static> {
     RendererConfig {
+        init: RendererInitConfig {
+            window_dims: Extent2D { width: 900, height: 900 },
+            ..Default::default()
+        },
         max_buffer_args: MaxBufferArgs {
             max_tri_verts: UNIT_QUAD.len() as u32,
             max_instances: 2048,
@@ -22,17 +30,22 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
     let tex_id = renderer.load_texture(&texture);
     let room = Room::new(Some(0));
+    room.ascii_print();
 
     renderer.write_vertex_buffer(0, UNIT_QUAD.iter().copied());
     let mut instance_count: u32 = 0;
     renderer.write_vertex_buffer(
         0,
-        room.iter_walls().map(|(Coord([x, y]), wall_up)| {
+        room.iter_walls().map(|(Coord([x, y]), orientation)| {
             let [mut tx, mut ty] = [x as f32, y as f32];
-            *if wall_up { &mut ty } else { &mut tx } -= 0.5;
+            let (coord, rot) = match orientation {
+                Orientation::Vertical => (&mut tx, 0.),
+                Orientation::Horizontal => (&mut ty, std::f32::consts::PI / 2.),
+            };
+            *coord -= 0.5;
             instance_count += 1;
             Mat4::from_translation(Vec3::new(tx, ty, 0.))
-                * Mat4::from_rotation_z(if wall_up { 0. } else { std::f32::consts::PI / 2. })
+                * Mat4::from_rotation_z(rot)
                 * Mat4::from_scale(Vec3::new(1.0, 0.16, 1.0))
         }),
     );
@@ -47,7 +60,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     );
     let draw_infos = [DrawInfo {
         instance_range: 0..instance_count,
-        view_transform: Mat4::from_scale(Vec3::new(0.1, 0.1, 1.))
+        view_transform: Mat4::from_scale(Vec3::new(0.15, 0.15, 1.))
             * Mat4::from_translation(Vec3::new(Room::W as f32 * -0.5, Room::H as f32 * -0.5, 0.)),
         vertex_range: 0..UNIT_QUAD.len() as u32,
     }];

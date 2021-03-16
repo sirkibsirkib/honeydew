@@ -15,6 +15,9 @@ struct GameState {
 }
 
 fn main() {
+    // let room = Room::new(Some(0));
+    // room.ascii_print();
+    // room.ascii_print2();
     gfx_2020::main_loop::<VulkanBackend, _, _>(
         &rendering::render_config(),
         rendering::game_state_init_fn,

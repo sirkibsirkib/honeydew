@@ -1,5 +1,7 @@
 // # Imports and constants
+
 use crate::rng::Rng;
+use core::fmt::{self, Debug, Formatter};
 
 ///////////////////////////////////////////////
 // # Data types
@@ -22,23 +24,40 @@ pub enum Direction {
     Left,
     Right,
 }
+#[derive(Copy, Clone, Debug)]
+pub enum Orientation {
+    Horizontal,
+    Vertical,
+}
 
 ///////////////////////////////////////////////
 // # associated consts
 impl Cell {
-    pub const OPEN: Self = Self { flags: 0b00000000 };
     pub const BLOCKED: Self = Self { flags: 0b00000001 };
     pub const WALL_UP: Self = Self { flags: 0b00000010 };
     pub const WALL_LE: Self = Self { flags: 0b00000100 };
     pub const TELEPOR: Self = Self { flags: 0b00001000 };
     ////////
+    pub const OPEN: Self = Self { flags: 0b00000000 };
     pub const CLOSED: Self = Self::BLOCKED.with(Self::WALL_UP).with(Self::WALL_LE);
+}
+impl Room {
+    pub const W: u16 = 8;
+    pub const H: u16 = 8;
+    const CELLS: u32 = Self::W as u32 * Self::H as u32;
+    const CENTER: Coord = Coord([Self::W / 2, Self::H / 2]);
 }
 
 ///////////////////////////////////////////////
 // # methods and functions
 
 impl Cell {
+    const fn orientation_to_wall_flag(orientation: Orientation) -> Self {
+        match orientation {
+            Orientation::Horizontal => Self::WALL_UP,
+            Orientation::Vertical => Self::WALL_LE,
+        }
+    }
     pub const fn with(self, rhs: Self) -> Self {
         Self { flags: self.flags | rhs.flags }
     }
@@ -51,22 +70,42 @@ impl Cell {
     pub const fn superset_of(self, rhs: Self) -> bool {
         rhs.subset_of(self)
     }
+    pub const fn has_wall(self, orientation: Orientation) -> bool {
+        self.superset_of(Self::orientation_to_wall_flag(orientation))
+    }
+    pub const fn is_blocked(self) -> bool {
+        self.superset_of(Self::BLOCKED)
+    }
+    ////////
     pub fn add(&mut self, rhs: Self) {
         *self = self.with(rhs);
     }
     pub fn remove(&mut self, rhs: Self) {
         *self = self.without(rhs);
     }
-}
-impl Room {
-    pub const W: u16 = 64;
-    pub const H: u16 = 64;
-    const CELLS: u32 = Self::W as u32 * Self::H as u32;
-    const CENTER: Coord = Coord([Self::W / 2, Self::H / 2]);
+    pub fn remove_wall(&mut self, orientation: Orientation) {
+        self.remove(Self::orientation_to_wall_flag(orientation))
+    }
 }
 
 ////////////
+impl Debug for Cell {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_set()
+            .entries(
+                if self.superset_of(Self::BLOCKED) { Some("BLOCKED") } else { None }
+                    .into_iter()
+                    .chain(if self.superset_of(Self::WALL_UP) { Some("WALL_UP") } else { None })
+                    .chain(if self.superset_of(Self::WALL_LE) { Some("WALL_LE") } else { None })
+                    .chain(if self.superset_of(Self::TELEPOR) { Some("TELEPOR") } else { None }),
+            )
+            .finish()
+    }
+}
 impl Coord {
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        (0..Room::H).flat_map(|y| (0..Room::W).map(move |x| Self([x, y])))
+    }
     pub fn try_step(self, dir: Direction) -> Option<Self> {
         let Coord([x, y]) = self;
         let xy = match dir {
@@ -94,11 +133,16 @@ impl Direction {
             Self::Up | Self::Left => true,
         }
     }
-    pub fn horizontal(self) -> bool {
+    pub fn crosses_walls_oriented(self) -> Orientation {
         match self {
-            Self::Up | Self::Down => false,
-            Self::Left | Self::Right => true,
+            Self::Up | Self::Down => Orientation::Horizontal,
+            Self::Left | Self::Right => Orientation::Vertical,
         }
+    }
+}
+impl Orientation {
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        [Self::Horizontal, Self::Vertical].iter().copied()
     }
 }
 
@@ -124,8 +168,7 @@ impl Room {
         use Cell as Rcd;
         self.get_mut_cell(dest).remove(Rcd::BLOCKED);
         let coord = if dir.crossed_wall_at_src() { src } else { dest };
-        let flags = if dir.horizontal() { Rcd::WALL_LE } else { Rcd::WALL_UP };
-        self.get_mut_cell(coord).remove(flags);
+        self.get_mut_cell(coord).remove_wall(dir.crosses_walls_oriented());
     }
     pub fn new(maybe_seed: Option<u64>) -> Self {
         use Cell as Rcd;
@@ -157,18 +200,18 @@ impl Room {
         }
         me
     }
-    pub fn coord_iter() -> impl Iterator<Item = Coord> {
-        (0..Self::H).flat_map(|y| (0..Self::W).map(move |x| Coord([x, y])))
-    }
     pub fn iter_cells(&self) -> impl Iterator<Item = (Coord, Cell)> + '_ {
-        Self::coord_iter().map(move |coord| (coord, self.get_cell(coord)))
+        Coord::iter_domain().zip(self.data.iter().flatten().copied())
     }
-    pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, bool)> + '_ {
+    pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Orientation)> + '_ {
         self.iter_cells().flat_map(|(coord, cell)| {
-            let some_coord = |up, some| if some { Some((coord, up)) } else { None };
-            some_coord(true, cell.subset_of(Cell::WALL_UP))
-                .into_iter()
-                .chain(some_coord(false, cell.subset_of(Cell::WALL_LE)))
+            Orientation::iter_domain().filter_map(move |orientation| {
+                if cell.has_wall(orientation) {
+                    Some((coord, orientation))
+                } else {
+                    None
+                }
+            })
         })
     }
     pub fn get_mut_cell(&mut self, Coord([x, y]): Coord) -> &mut Cell {
@@ -177,24 +220,54 @@ impl Room {
     pub fn get_cell(&self, Coord([x, y]): Coord) -> Cell {
         self.data[y as usize][x as usize]
     }
-    pub fn ascii_draw(&self) {
+    pub fn ascii_print(&self) {
+        // for c in self.iter_cells() {
+        //     println!("{:?}", c);
+        // }
+        // for c in self.iter_walls() {
+        //     println!("{:?}", c);
+        // }
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
-        use {std::io::Write, Cell as Rcd};
+        use std::io::Write;
         for row in self.data.iter() {
             // one row for vertical walls
             for cell in row.iter() {
-                let up_char = if cell.superset_of(Rcd::WALL_UP) { '―' } else { ' ' };
+                let up_char = if cell.has_wall(Orientation::Horizontal) { '-' } else { ' ' };
                 let _ = write!(stdout, "·{}{}", up_char, up_char);
             }
             let _ = writeln!(stdout);
             // one row for horizontal walls & blockages
             for cell in row.iter() {
-                let left_char = if cell.superset_of(Rcd::WALL_LE) { '|' } else { ' ' };
-                let blocked_char = if cell.superset_of(Rcd::BLOCKED) { '#' } else { ' ' };
+                let left_char = if cell.has_wall(Orientation::Vertical) { '|' } else { ' ' };
+                let blocked_char = if cell.is_blocked() { '#' } else { ' ' };
                 let _ = write!(stdout, "{}{}{}", left_char, blocked_char, blocked_char);
             }
             let _ = writeln!(stdout);
         }
     }
+    // pub fn ascii_print2(&self) {
+    //     println!();
+    //     let mut ascii_chars = [[b' '; Self::W as usize * 3]; Self::H as usize * 2];
+    //     let stdout = std::io::stdout();
+    //     let mut stdout = stdout.lock();
+    //     use std::io::Write;
+
+    //     for (coord, orientation) in self.iter_walls() {
+    //         let [x, y] = [coord.0[0] as usize, coord.0[1] as usize];
+    //         match orientation {
+    //             Orientation::Horizontal => {
+    //                 ascii_chars[y * 2][x * 3 + 1] = b'-';
+    //                 ascii_chars[y * 2][x * 3 + 2] = b'-';
+    //             }
+    //             Orientation::Vertical => {
+    //                 ascii_chars[y * 2 + 1][x * 3 + 0] = b'|';
+    //             }
+    //         }
+    //     }
+
+    //     for row in ascii_chars.iter() {
+    //         let _ = writeln!(stdout, "{}", std::str::from_utf8(row).unwrap());
+    //     }
+    // }
 }
