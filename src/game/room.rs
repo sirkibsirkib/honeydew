@@ -1,33 +1,30 @@
 // # Imports and constants
 
-use crate::rng::Rng;
-use core::fmt::{self, Debug, Formatter};
+use {
+    crate::{rng::Rng, Orientation},
+    core::fmt::{self, Debug, Formatter},
+};
 
 ///////////////////////////////////////////////
 // # Data types
 
 #[derive(Copy, Clone, Debug)]
-pub struct Coord(pub [u16; 2]);
+pub(crate) struct Coord(pub [u16; 2]);
 
 #[derive(Eq, PartialEq, Copy, Clone)]
-pub struct Cell {
+pub(crate) struct Cell {
     flags: u8,
 }
 
-pub struct Room {
+pub(crate) struct Room {
     data: [[Cell; Self::W as usize]; Self::H as usize],
 }
 #[derive(Debug, Copy, Clone)]
-pub enum Direction {
+pub(crate) enum Direction {
     Up,
     Down,
     Left,
     Right,
-}
-#[derive(Copy, Clone, Debug)]
-pub enum Orientation {
-    Horizontal,
-    Vertical,
 }
 
 ///////////////////////////////////////////////
@@ -56,6 +53,13 @@ impl Cell {
         match orientation {
             Orientation::Horizontal => Self::WALL_UP,
             Orientation::Vertical => Self::WALL_LE,
+        }
+    }
+    pub const fn count_walls(self) -> u8 {
+        match [self.has_wall(Orientation::Vertical), self.has_wall(Orientation::Horizontal)] {
+            [false, false] => 0,
+            [false, true] | [true, false] => 1,
+            [true, true] => 2,
         }
     }
     pub const fn with(self, rhs: Self) -> Self {
@@ -140,11 +144,6 @@ impl Direction {
         }
     }
 }
-impl Orientation {
-    pub fn iter_domain() -> impl Iterator<Item = Self> {
-        [Self::Horizontal, Self::Vertical].iter().copied()
-    }
-}
 
 impl Room {
     fn dir_to_random_blocked_adjacent_to(
@@ -208,11 +207,11 @@ impl Room {
         }
         me
     }
-    pub fn iter_cells(&self) -> impl Iterator<Item = (Coord, Cell)> + '_ {
-        Coord::iter_domain().zip(self.data.iter().flatten().copied())
+    pub fn iter_cells(&self) -> impl Iterator<Item = Cell> + '_ {
+        self.data.iter().flatten().copied()
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Orientation)> + '_ {
-        self.iter_cells().flat_map(|(coord, cell)| {
+        Coord::iter_domain().zip(self.iter_cells()).flat_map(|(coord, cell)| {
             Orientation::iter_domain().filter_map(move |orientation| {
                 if cell.has_wall(orientation) {
                     Some((coord, orientation))
