@@ -1,6 +1,6 @@
 use {
     crate::{
-        room::{Coord, RoomData},
+        room::{Coord, Room},
         GameState,
     },
     gfx_2020::{gfx_hal::Backend, vert_coord_consts::UNIT_QUAD, *},
@@ -16,16 +16,18 @@ pub fn render_config() -> RendererConfig<'static> {
     }
 }
 
-pub(crate) fn game_state_init_fn<B: Backend>(renderer: &mut Renderer<B>) -> GameState {
+pub(crate) fn game_state_init_fn<B: Backend>(
+    renderer: &mut Renderer<B>,
+) -> ProceedWith<&'static mut GameState> {
     let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
     let tex_id = renderer.load_texture(&texture);
-    let room_data = RoomData::new(Some(0));
+    let room = Room::new(Some(0));
 
     renderer.write_vertex_buffer(0, UNIT_QUAD.iter().copied());
     let mut instance_count: u32 = 0;
     renderer.write_vertex_buffer(
         0,
-        room_data.iter_walls().map(|(Coord([x, y]), wall_up)| {
+        room.iter_walls().map(|(Coord([x, y]), wall_up)| {
             let [mut tx, mut ty] = [x as f32, y as f32];
             *if wall_up { &mut ty } else { &mut tx } -= 0.5;
             instance_count += 1;
@@ -46,14 +48,10 @@ pub(crate) fn game_state_init_fn<B: Backend>(renderer: &mut Renderer<B>) -> Game
     let draw_infos = [DrawInfo {
         instance_range: 0..instance_count,
         view_transform: Mat4::from_scale(Vec3::new(0.1, 0.1, 1.))
-            * Mat4::from_translation(Vec3::new(
-                RoomData::W as f32 * -0.5,
-                RoomData::H as f32 * -0.5,
-                0.,
-            )),
+            * Mat4::from_translation(Vec3::new(Room::W as f32 * -0.5, Room::H as f32 * -0.5, 0.)),
         vertex_range: 0..UNIT_QUAD.len() as u32,
     }];
-    GameState { room_data, tex_id, draw_infos }
+    Ok(heap_leak(GameState { room, tex_id, draw_infos }))
 }
 
 pub fn heap_leak<T>(t: T) -> &'static mut T {

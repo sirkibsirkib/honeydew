@@ -1,14 +1,19 @@
+// # Imports and constants
 use crate::rng::Rng;
+
 ///////////////////////////////////////////////
+// # Data types
 
 #[derive(Copy, Clone, Debug)]
 pub struct Coord(pub [u16; 2]);
 
 #[derive(Eq, PartialEq, Copy, Clone)]
-pub struct RoomCellData(u8);
+pub struct Cell {
+    flags: u8,
+}
 
-pub struct RoomData {
-    data: [[RoomCellData; Self::W as usize]; Self::H as usize],
+pub struct Room {
+    data: [[Cell; Self::W as usize]; Self::H as usize],
 }
 #[derive(Debug, Copy, Clone)]
 pub enum Direction {
@@ -19,23 +24,29 @@ pub enum Direction {
 }
 
 ///////////////////////////////////////////////
-
-impl RoomCellData {
-    pub const BLOCKED: Self = Self(0b00000001);
-    pub const WALL_UP: Self = Self(0b00000010);
-    pub const WALL_LE: Self = Self(0b00000100);
-    pub const TELEPOR: Self = Self(0b00001000);
+// # associated consts
+impl Cell {
+    pub const OPEN: Self = Self { flags: 0b00000000 };
+    pub const BLOCKED: Self = Self { flags: 0b00000001 };
+    pub const WALL_UP: Self = Self { flags: 0b00000010 };
+    pub const WALL_LE: Self = Self { flags: 0b00000100 };
+    pub const TELEPOR: Self = Self { flags: 0b00001000 };
     ////////
-    pub const OPEN: Self = Self(0);
     pub const CLOSED: Self = Self::BLOCKED.with(Self::WALL_UP).with(Self::WALL_LE);
+}
+
+///////////////////////////////////////////////
+// # methods and functions
+
+impl Cell {
     pub const fn with(self, rhs: Self) -> Self {
-        Self(self.0 | rhs.0)
+        Self { flags: self.flags | rhs.flags }
     }
     pub const fn without(self, rhs: Self) -> Self {
-        Self(self.0 & !rhs.0)
+        Self { flags: self.flags & !rhs.flags }
     }
     pub const fn subset_of(self, rhs: Self) -> bool {
-        self.without(rhs).0 == 0
+        self.without(rhs).flags == 0
     }
     pub const fn superset_of(self, rhs: Self) -> bool {
         rhs.subset_of(self)
@@ -47,7 +58,7 @@ impl RoomCellData {
         *self = self.without(rhs);
     }
 }
-impl RoomData {
+impl Room {
     pub const W: u16 = 64;
     pub const H: u16 = 64;
     const CELLS: u32 = Self::W as u32 * Self::H as u32;
@@ -61,8 +72,8 @@ impl Coord {
         let xy = match dir {
             Direction::Up if y > 0 => [x, y - 1],
             Direction::Left if x > 0 => [x - 1, y],
-            Direction::Down if y < RoomData::H - 2 => [x, y + 1],
-            Direction::Right if x < RoomData::W - 2 => [x + 1, y],
+            Direction::Down if y < Room::H - 2 => [x, y + 1],
+            Direction::Right if x < Room::W - 2 => [x + 1, y],
             _ => return None,
         };
         Some(Self(xy))
@@ -91,7 +102,7 @@ impl Direction {
     }
 }
 
-impl RoomData {
+impl Room {
     fn dir_to_random_blocked_adjacent_to(
         &self,
         rng: &mut Rng,
@@ -101,7 +112,7 @@ impl RoomData {
         rng.shuffle_slice(&mut dirs);
         let steps_to_blocked = move |dir: Direction| {
             if let Some(dest) = src.try_step(dir) {
-                if self.get_cell(dest).superset_of(RoomCellData::BLOCKED) {
+                if self.get_cell(dest).superset_of(Cell::BLOCKED) {
                     return Some((dir, dest));
                 }
             }
@@ -110,14 +121,14 @@ impl RoomData {
         dirs.iter().copied().filter_map(steps_to_blocked).next()
     }
     fn update_cells_with_step(&mut self, [src, dest]: [Coord; 2], dir: Direction) {
-        use RoomCellData as Rcd;
+        use Cell as Rcd;
         self.get_mut_cell(dest).remove(Rcd::BLOCKED);
         let coord = if dir.crossed_wall_at_src() { src } else { dest };
         let flags = if dir.horizontal() { Rcd::WALL_LE } else { Rcd::WALL_UP };
         self.get_mut_cell(coord).remove(flags);
     }
     pub fn new(maybe_seed: Option<u64>) -> Self {
-        use RoomCellData as Rcd;
+        use Cell as Rcd;
         let rng = &mut Rng::new(maybe_seed);
         let mut me = Self { data: [[Rcd::CLOSED; Self::W as usize]; Self::H as usize] };
 
@@ -136,11 +147,11 @@ impl RoomData {
                 break;
             }
         }
-        for _ in 0..(RoomData::CELLS / 8) {
+        for _ in 0..(Room::CELLS / 8) {
             let flag = if rng.gen_bool() { Rcd::WALL_LE } else { Rcd::WALL_UP };
             let coord = Coord([
-                rng.fastrand_rng.u16(1..RoomData::W - 1), // x
-                rng.fastrand_rng.u16(1..RoomData::H - 1),
+                rng.fastrand_rng.u16(1..Room::W - 1), // x
+                rng.fastrand_rng.u16(1..Room::H - 1),
             ]);
             me.get_mut_cell(coord).remove(flag);
         }
@@ -149,39 +160,41 @@ impl RoomData {
     pub fn coord_iter() -> impl Iterator<Item = Coord> {
         (0..Self::H).flat_map(|y| (0..Self::W).map(move |x| Coord([x, y])))
     }
-    pub fn iter_cells(&self) -> impl Iterator<Item = (Coord, RoomCellData)> + '_ {
+    pub fn iter_cells(&self) -> impl Iterator<Item = (Coord, Cell)> + '_ {
         Self::coord_iter().map(move |coord| (coord, self.get_cell(coord)))
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, bool)> + '_ {
         self.iter_cells().flat_map(|(coord, cell)| {
             let some_coord = |up, some| if some { Some((coord, up)) } else { None };
-            some_coord(true, cell.subset_of(RoomCellData::WALL_UP))
+            some_coord(true, cell.subset_of(Cell::WALL_UP))
                 .into_iter()
-                .chain(some_coord(false, cell.subset_of(RoomCellData::WALL_LE)))
+                .chain(some_coord(false, cell.subset_of(Cell::WALL_LE)))
         })
     }
-    pub fn get_mut_cell(&mut self, Coord([x, y]): Coord) -> &mut RoomCellData {
+    pub fn get_mut_cell(&mut self, Coord([x, y]): Coord) -> &mut Cell {
         &mut self.data[y as usize][x as usize]
     }
-    pub fn get_cell(&self, Coord([x, y]): Coord) -> RoomCellData {
+    pub fn get_cell(&self, Coord([x, y]): Coord) -> Cell {
         self.data[y as usize][x as usize]
     }
-    pub fn draw(&self) {
-        use RoomCellData as Rcd;
+    pub fn ascii_draw(&self) {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        use {std::io::Write, Cell as Rcd};
         for row in self.data.iter() {
             // one row for vertical walls
             for cell in row.iter() {
                 let up_char = if cell.superset_of(Rcd::WALL_UP) { '―' } else { ' ' };
-                print!("·{}{}", up_char, up_char);
+                let _ = write!(stdout, "·{}{}", up_char, up_char);
             }
-            println!();
+            let _ = writeln!(stdout);
             // one row for horizontal walls & blockages
             for cell in row.iter() {
                 let left_char = if cell.superset_of(Rcd::WALL_LE) { '|' } else { ' ' };
                 let blocked_char = if cell.superset_of(Rcd::BLOCKED) { '#' } else { ' ' };
-                print!("{}{}{}", left_char, blocked_char, blocked_char);
+                let _ = write!(stdout, "{}{}{}", left_char, blocked_char, blocked_char);
             }
-            println!();
+            let _ = writeln!(stdout);
         }
     }
 }
