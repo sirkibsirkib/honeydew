@@ -174,6 +174,14 @@ impl Room {
         use Cell as Rcd;
         let rng = &mut Rng::new(maybe_seed);
         let mut me = Self { data: [[Rcd::CLOSED; Self::W as usize]; Self::H as usize] };
+        for row in me.data.iter_mut() {
+            // in every cell, rightmost cell has no UP wall
+            row.last_mut().unwrap().remove(Cell::WALL_UP)
+        }
+        for cell in me.data.last_mut().unwrap() {
+            // in last row, every cell has no LEFT wall
+            cell.remove(Cell::WALL_LE)
+        }
 
         let mut at = Self::CENTER;
         let mut step_stack = Vec::<Direction>::with_capacity(1 << 12);

@@ -39,8 +39,8 @@ pub(crate) fn game_state_init_fn<B: Backend>(
         room.iter_walls().map(|(Coord([x, y]), orientation)| {
             let [mut tx, mut ty] = [x as f32, y as f32];
             let (coord, rot) = match orientation {
-                Orientation::Vertical => (&mut tx, 0.),
-                Orientation::Horizontal => (&mut ty, std::f32::consts::PI / 2.),
+                Orientation::Horizontal => (&mut ty, 0.), // up walls are moved UP and NOT rotated
+                Orientation::Vertical => (&mut tx, std::f32::consts::PI / 2.), // left walls are moved LEFT and are ARE rotated 90 degrees
             };
             *coord -= 0.5;
             instance_count += 1;
