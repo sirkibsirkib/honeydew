@@ -1,3 +1,4 @@
+mod bit_set;
 pub mod room;
 use {
     crate::{GameState, Orientation, Sign},

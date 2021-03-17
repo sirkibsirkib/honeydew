@@ -9,7 +9,7 @@ use {
 // # Data types
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct Coord(pub [u16; 2]);
+pub(crate) struct Coord(pub [u8; 2]);
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub(crate) struct Cell {
@@ -39,9 +39,9 @@ impl Cell {
     pub const CLOSED: Self = Self::BLOCKED.with(Self::WALL_UP).with(Self::WALL_LE);
 }
 impl Room {
-    pub const W: u16 = 8;
-    pub const H: u16 = 8;
-    const CELLS: u32 = Self::W as u32 * Self::H as u32;
+    pub const W: u8 = 8;
+    pub const H: u8 = 8;
+    const CELLS: u16 = Self::W as u16 * Self::H as u16;
     const CENTER: Coord = Coord([Self::W / 2, Self::H / 2]);
 }
 
@@ -200,8 +200,8 @@ impl Room {
         for _ in 0..(Room::CELLS / 8) {
             let flag = if rng.gen_bool() { Rcd::WALL_LE } else { Rcd::WALL_UP };
             let coord = Coord([
-                rng.fastrand_rng.u16(1..Room::W - 1), // x
-                rng.fastrand_rng.u16(1..Room::H - 1),
+                rng.fastrand_rng.u8(1..Room::W - 1), // x
+                rng.fastrand_rng.u8(1..Room::H - 1),
             ]);
             me.get_mut_cell(coord).remove(flag);
         }
