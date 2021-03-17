@@ -68,13 +68,6 @@ impl Default for AxisPressingState {
 }
 impl GameState {
     fn update_player_data(&mut self) {
-        fn wrap_value(value: &mut f32, bound: f32) {
-            if *value < 0. {
-                *value += bound;
-            } else if bound < *value {
-                *value -= bound;
-            }
-        };
         // 1. update my velocity
         for ori in Orientation::iter_domain() {
             self.players[self.controlling].vel[ori] = self.pressing_state.map[ori].solo_pressed();
