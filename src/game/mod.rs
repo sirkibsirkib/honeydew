@@ -81,31 +81,45 @@ impl GameState {
         }
 
         for player in self.players.iter_mut() {
+            // movement
+            for ori in Orientation::iter_domain() {
+                if let Some(sign) = player.vel[ori] {
+                    player.pos[ori.vec_index()] += sign * 0.05;
+                }
+            }
+
             // collision detection
             /*
             When checking a DIRECTED collision between rectangles active A and passive P,
-            (assuming each has a [f32; 2] .center)
-            - we can compute a LEFT box
+            (assuming each has a Vec2 .center)
+            there are 8 collision cases between the player and the wall
+            the objective is to make the SMALLEST change necessary to resolve the collision.
+            so we
 
 
             */
-            // let at = Coord::new_checked([player.pos[0] as u8, player.pos[1] as u8]).unwrap();
-            // for ori in Orientation::iter_domain() {
-            //     if let Some(sign) = player.vel[ori] {
-            //         let wall_at = at.wall_if_stepped(Direction::new(ori, sign));
-            //         if self.room.wall_sets[!ori].contains(wall_at.into()) {
-            //             player.vel[ori] = None;
-            //         }
-            //     }
-            // }
-            // moving
-            for ori in Orientation::iter_domain() {
-                if let Some(sign) = player.vel[ori] {
-                    player.pos[ori.vec3_index()] += sign * 0.05;
+            loop {
+                let mut smallest_correction = Option::<(Orientation, f32)>::None;
+                todo!();
+                if let Some((ori, delta)) = smallest_correction {
+                    player.pos[ori.vec_index()] += delta;
+                    // continue correcting!
+                } else {
+                    break;
                 }
             }
-            wrap_value(&mut player.pos[0], bit_set::W as f32);
-            wrap_value(&mut player.pos[1], bit_set::H as f32);
+
+            // wrap position
+            const BOUND: Vec2 = Vec2 { x: bit_set::W as f32, y: bit_set::H as f32 };
+            for ori in Orientation::iter_domain() {
+                let value = &mut player.pos[ori.vec_index()];
+                let bound = BOUND[ori.vec_index()];
+                if *value < 0. {
+                    *value += bound;
+                } else if bound < *value {
+                    *value -= bound;
+                }
+            }
         }
     }
     pub(crate) fn update_player_transforms<B: Backend>(&mut self, renderer: &mut Renderer<B>) {

@@ -33,6 +33,11 @@ pub enum Sign {
 }
 
 /////////////////////////
+impl Sign {
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        [Positive, Negative].iter().copied()
+    }
+}
 impl Mul<f32> for Sign {
     type Output = f32;
     fn mul(self, rhs: f32) -> <Self as Mul<f32>>::Output {
@@ -63,7 +68,7 @@ impl Orientation {
             Vertical
         }
     }
-    pub const fn vec3_index(self) -> usize {
+    pub const fn vec_index(self) -> usize {
         match self {
             Horizontal => 0,
             Vertical => 1,
