@@ -176,6 +176,11 @@ impl Iterator for BitSetIter<'_> {
     }
 }
 
+impl Into<Vec2> for Coord {
+    fn into(self) -> Vec2 {
+        Vec2 { x: self.x as f32, y: self.y as f32 }
+    }
+}
 impl Coord {
     pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
         match dir.sign() {
@@ -190,7 +195,7 @@ impl Coord {
     pub fn random(rng: &mut Rng) -> Self {
         Index::random(rng).into()
     }
-    pub fn xy(self) -> [u8; 2] {
+    pub const fn xy(self) -> [u8; 2] {
         [self.x, self.y]
     }
     #[inline]

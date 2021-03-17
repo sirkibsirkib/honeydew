@@ -2,7 +2,14 @@ use {
     crate::rng::Rng,
     core::ops::{Mul, Not},
 };
-pub use {core::ops::Range, enum_map::EnumMap, Direction::*, Orientation::*, Sign::*};
+pub use {
+    core::ops::Range,
+    enum_map::EnumMap,
+    gfx_2020::{Vec2, Vec3},
+    Direction::*,
+    Orientation::*,
+    Sign::*,
+};
 
 ////////////////////////////////
 #[derive(Debug, Copy, Clone)]

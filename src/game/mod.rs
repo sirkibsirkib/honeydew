@@ -12,8 +12,8 @@ use {
     room::Room,
 };
 
-pub const PLAYER_SIZE: [f32; 2] = [0.5, 0.5];
-pub const UP_WALL_SIZE: [f32; 2] = [1.0, 0.16];
+pub const PLAYER_SIZE: Vec2 = Vec2 { x: 0.5, y: 0.5 };
+pub const UP_WALL_SIZE: Vec2 = Vec2 { x: 1.0, y: 0.16 };
 
 // allows an upper bound for renderer's instance buffers
 pub const PLAYER_CAP: u32 = 32;
@@ -31,7 +31,7 @@ pub struct GameState {
 
 #[derive(Debug)]
 pub struct Player {
-    pub pos: Vec3,
+    pub pos: Vec2,
     pub vel: EnumMap<Orientation, Option<Sign>>,
 }
 #[derive(Default, Debug)]
@@ -42,7 +42,20 @@ pub struct PressingState {
 struct AxisPressingState {
     map: EnumMap<Sign, ElementState>,
 }
+#[derive(Debug, Clone)]
+struct Rect {
+    center: Vec2,
+    size: Vec2,
+}
 /////////////////////////////////
+impl Rect {
+    fn collider_with(&self, size: Vec2) -> Self {
+        Self { center: self.center, size: self.size + size }
+    }
+    fn realign_center(&self, center: &mut Vec2) -> bool {
+        todo!()
+    }
+}
 impl Default for AxisPressingState {
     fn default() -> Self {
         Self {
@@ -69,15 +82,22 @@ impl GameState {
 
         for player in self.players.iter_mut() {
             // collision detection
-            let at = Coord::new_checked([player.pos[0] as u8, player.pos[1] as u8]).unwrap();
-            for ori in Orientation::iter_domain() {
-                if let Some(sign) = player.vel[ori] {
-                    let wall_at = at.wall_if_stepped(Direction::new(ori, sign));
-                    if self.room.wall_sets[!ori].contains(wall_at.into()) {
-                        player.vel[ori] = None;
-                    }
-                }
-            }
+            /*
+            When checking a DIRECTED collision between rectangles active A and passive P,
+            (assuming each has a [f32; 2] .center)
+            - we can compute a LEFT box
+
+
+            */
+            // let at = Coord::new_checked([player.pos[0] as u8, player.pos[1] as u8]).unwrap();
+            // for ori in Orientation::iter_domain() {
+            //     if let Some(sign) = player.vel[ori] {
+            //         let wall_at = at.wall_if_stepped(Direction::new(ori, sign));
+            //         if self.room.wall_sets[!ori].contains(wall_at.into()) {
+            //             player.vel[ori] = None;
+            //         }
+            //     }
+            // }
             // moving
             for ori in Orientation::iter_domain() {
                 if let Some(sign) = player.vel[ori] {
@@ -92,13 +112,14 @@ impl GameState {
         renderer.write_vertex_buffer(
             self.player_instances_start,
             self.players.iter().map(|player| {
-                let [sx, sy] = PLAYER_SIZE;
-                Mat4::from_translation(player.pos) * Mat4::from_scale(Vec3::new(sx, sy, 1.))
+                Mat4::from_translation(player.pos.extend(0.))
+                    * Mat4::from_scale(PLAYER_SIZE.extend(1.))
             }),
         );
     }
     pub(crate) fn update_view_transforms(&mut self) {
-        const SCALE_XY: [f32; 2] = [1. / 16.; 2];
+        const SCALE: f32 = 1. / 16.;
+        const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
         let translations = {
             const W: f32 = bit_set::W as f32;
             const H: f32 = bit_set::H as f32;
@@ -112,17 +133,11 @@ impl GameState {
                 // shift to BOTTOM view
                 base[1] += H;
             }
-            base = -base;
-            [
-                base,
-                base + Vec3::new(W, 0., 0.),
-                base + Vec3::new(0., H, 0.),
-                base + Vec3::new(W, H, 0.),
-            ]
+            [-base, Vec2::new(W, 0.) - base, Vec2::new(0., H) - base, Vec2::new(W, H) - base]
         };
         for (draw_info, translation) in self.draw_infos.iter_mut().zip(translations.iter()) {
-            draw_info.view_transform = Mat4::from_scale(Vec3::new(SCALE_XY[0], SCALE_XY[1], 1.0))
-                * Mat4::from_translation(*translation)
+            draw_info.view_transform = Mat4::from_scale(SCALE_XY.extend(1.))
+                * Mat4::from_translation(translation.extend(0.))
         }
     }
     fn pressing_state_update(&mut self, vkc: VirtualKeyCode, state: ElementState) -> bool {

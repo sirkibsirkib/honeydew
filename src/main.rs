@@ -49,14 +49,14 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
     let tex_id = renderer.load_texture(&texture);
     let mut rng = Rng::new(Some(0));
-    // let room = Room::new(&mut rng);
+    let room = Room::new(&mut rng);
     // TEMP: collision detection!
-    let room = Room {
-        wall_sets: enum_map::enum_map! {
-            Horizontal => [[2,2]].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
-            Vertical => [].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
-        },
-    };
+    // let room = Room {
+    //     wall_sets: enum_map::enum_map! {
+    //         Horizontal => [[2,2]].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
+    //         Vertical => [].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
+    //     },
+    // };
     room.ascii_print();
     let wall_count = room.wall_count();
     let player_count = 3;
@@ -66,21 +66,23 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let tri_vert_iter = UNIT_QUAD.iter().copied();
     let wall_transform_iter = room.iter_walls().map(|(coord, orientation)| {
         let [x, y] = coord.xy();
-        let [mut tx, mut ty] = [x as f32, y as f32];
+        let mut xy = Vec2::new(x as f32, y as f32);
         let (value, rot) = match orientation {
-            Orientation::Horizontal => (&mut ty, 0.), // up walls are moved UP and NOT rotated
-            Orientation::Vertical => (&mut tx, std::f32::consts::PI * -0.5), // left walls are moved LEFT and are ARE rotated 90 degrees
+            Orientation::Horizontal => (&mut xy[1], 0.), // up walls are moved UP and NOT rotated
+            Orientation::Vertical => (&mut xy[0], std::f32::consts::PI * -0.5), // left walls are moved LEFT and are ARE rotated 90 degrees
         };
         *value -= 0.5;
-        let [sx, sy] = game::UP_WALL_SIZE;
-        Mat4::from_translation(Vec3::new(tx, ty, 0.))
+        Mat4::from_translation(xy.extend(0.))
             * Mat4::from_rotation_z(rot)
-            * Mat4::from_scale(Vec3::new(sx, sy, 1.0))
+            * Mat4::from_scale(game::UP_WALL_SIZE.extend(1.))
     });
 
     fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
-        const TILE_SIZE: [f32; 2] = [1. / 6., 1. / 3.];
-        TexScissor { top_left: [TILE_SIZE[0] * x as f32, TILE_SIZE[1] * y as f32], size: TILE_SIZE }
+        const TILE_SIZE: Vec2 = Vec2 { x: 1. / 6., y: 1. / 3. };
+        TexScissor {
+            top_left: Vec2::new(TILE_SIZE[0] * x as f32, TILE_SIZE[1] * y as f32),
+            size: TILE_SIZE,
+        }
     }
     let wall_tex_scissor_iter =
         std::iter::repeat(scissor_for_tile_at([0, 0])).take(wall_count as usize);
@@ -96,8 +98,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
         let mut players = Vec::<Player>::with_capacity(player_count as usize);
         for _ in 0..player_count {
             let pos = 'pos_guess: loop {
-                let [x, y] = Coord::random(&mut rng).xy();
-                let pos = Vec3::new(x as f32, y as f32, 0.);
+                let pos: Vec2 = Coord::random(&mut rng).into();
                 for player in players.iter() {
                     if player.pos.distance(pos) < 2. {
                         continue 'pos_guess;
