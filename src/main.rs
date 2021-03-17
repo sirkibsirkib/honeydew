@@ -6,7 +6,11 @@ mod rng;
 use {
     crate::{
         basic::*,
-        game::{bit_set::Coord, room::Room, GameState, Player},
+        game::{
+            bit_set::{self, Coord},
+            room::Room,
+            GameState, Player,
+        },
         rng::Rng,
     },
     gfx_2020::{
@@ -29,7 +33,7 @@ fn render_config() -> RendererConfig<'static> {
         },
         max_buffer_args: MaxBufferArgs {
             max_tri_verts: UNIT_QUAD.len() as u32,
-            max_instances: 2048,
+            max_instances: bit_set::INDICES as u32 * 2 + game::PLAYER_CAP,
         },
         ..Default::default()
     }
@@ -48,54 +52,73 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let room = Room::new(&mut rng);
     room.ascii_print();
     let wall_count = room.wall_count();
-    let instance_count = wall_count + 1;
+    let player_count = 3;
+    assert!(player_count <= game::PLAYER_CAP);
+    let instance_count = wall_count + player_count;
 
     let tri_vert_iter = UNIT_QUAD.iter().copied();
     let wall_transform_iter = room.iter_walls().map(|(coord, orientation)| {
         let [x, y] = coord.xy();
         let [mut tx, mut ty] = [x as f32, y as f32];
-        let (coord, rot) = match orientation {
+        let (value, rot) = match orientation {
             Orientation::Horizontal => (&mut ty, 0.), // up walls are moved UP and NOT rotated
             Orientation::Vertical => (&mut tx, std::f32::consts::PI * -0.5), // left walls are moved LEFT and are ARE rotated 90 degrees
         };
-        *coord -= 0.5;
+        *value -= 0.5;
         Mat4::from_translation(Vec3::new(tx, ty, 0.))
             * Mat4::from_rotation_z(rot)
             * Mat4::from_scale(Vec3::new(1.0, 0.16, 1.0))
     });
 
-    let wall_tex_scissor_iter = std::iter::repeat(TexScissor {
-        top_left: [0., 0.],
-        size: [6.0f32.recip(), 3.0f32.recip()],
-    })
-    .take(instance_count as usize);
+    fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
+        const TILE_SIZE: [f32; 2] = [1. / 6., 1. / 3.];
+        TexScissor { top_left: [TILE_SIZE[0] * x as f32, TILE_SIZE[1] * y as f32], size: TILE_SIZE }
+    }
+    let wall_tex_scissor_iter =
+        std::iter::repeat(scissor_for_tile_at([0, 0])).take(wall_count as usize);
+    let player_tex_scissor_iter =
+        std::iter::repeat(scissor_for_tile_at([3, 0])).take(wall_count as usize);
 
     renderer.write_vertex_buffer(0, tri_vert_iter);
     renderer.write_vertex_buffer(0, wall_transform_iter);
-    renderer.write_vertex_buffer(0, wall_tex_scissor_iter);
+    renderer.write_vertex_buffer(0, wall_tex_scissor_iter.chain(player_tex_scissor_iter));
 
     let controlling = 0;
-    let players = [Player {
-        pos: {
-            let [x, y] = Coord::random_tl_interior(&mut rng).xy();
-            Vec3::new(x as f32, y as f32, 0.)
-        },
-        vel: Vec3::from([0.; 3]),
-    }];
-    let draw_infos = [DrawInfo {
+    let players = {
+        let mut players = Vec::<Player>::with_capacity(player_count as usize);
+        for _ in 0..player_count {
+            let pos = 'pos_guess: loop {
+                let [x, y] = Coord::random(&mut rng).xy();
+                let pos = Vec3::new(x as f32, y as f32, 0.);
+                for player in players.iter() {
+                    if player.pos.distance(pos) < 2. {
+                        continue 'pos_guess;
+                    }
+                }
+                break 'pos_guess pos;
+            };
+            players.push(Player { pos, vel: Vec3::default() });
+        }
+        players
+    };
+    let new_draw_info = || DrawInfo {
         instance_range: 0..instance_count,
-        view_transform: GameState::calc_view_transform(players[controlling].pos),
+        view_transform: Mat4::identity(),
         vertex_range: 0..UNIT_QUAD.len() as u32,
-    }];
-
-    Ok(heap_leak(GameState {
+    };
+    let draw_infos = [new_draw_info(), new_draw_info(), new_draw_info(), new_draw_info()];
+    let mut state = GameState {
+        player_instances_start: wall_count,
         pressing_state: Default::default(),
         room,
         tex_id,
         draw_infos,
         players,
         controlling,
-    }))
+    };
+    state.update_player_transforms(renderer);
+    state.update_view_transforms();
+    Ok(heap_leak(state))
 }
 
 fn main() {

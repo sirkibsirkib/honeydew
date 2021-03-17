@@ -1,4 +1,5 @@
 use {crate::rng::Rng, core::ops::Not};
+pub use {core::ops::Range, Direction::*, Orientation::*, Sign::*};
 
 ////////////////////////////////
 #[derive(Debug, Copy, Clone)]
@@ -39,6 +40,21 @@ impl Orientation {
             Self::Horizontal
         } else {
             Self::Vertical
+        }
+    }
+}
+
+impl Direction {
+    pub const fn orientation(self) -> Orientation {
+        match self {
+            Self::Up | Self::Down => Orientation::Vertical,
+            Self::Left | Self::Right => Orientation::Horizontal,
+        }
+    }
+    pub const fn sign(self) -> Sign {
+        match self {
+            Self::Up | Self::Left => Sign::Negative,
+            Self::Down | Self::Right => Sign::Positive,
         }
     }
 }

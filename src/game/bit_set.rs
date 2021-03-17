@@ -13,7 +13,6 @@ pub struct Coord {
     x: u8, // invariant: < W
 }
 
-#[derive(Default)]
 pub struct BitSet {
     // invariant: bits outside of range 0..INDICES are zero
     words: [usize; Self::WORDS as usize],
@@ -28,6 +27,11 @@ struct SplitIndex {
     idx_of: usize, // invariant: < BitSet::WORDS
 }
 ///////////////////////////////////////////////////////////////
+impl Default for BitSet {
+    fn default() -> Self {
+        Self { words: [0; Self::WORDS as usize] }
+    }
+}
 impl SplitIndex {
     #[inline]
     fn unsplit(self) -> Index {
@@ -39,6 +43,7 @@ const fn div_round_up(x: u16, y: u16) -> u16 {
 }
 
 impl Index {
+    const DOMAIN_RANGE: Range<u16> = 0..INDICES;
     #[inline]
     fn split(self) -> SplitIndex {
         SplitIndex {
@@ -47,7 +52,10 @@ impl Index {
         }
     }
     fn iter_domain() -> impl Iterator<Item = Self> {
-        (0..INDICES).map(Index)
+        (Self::DOMAIN_RANGE).map(Index)
+    }
+    fn random(rng: &mut Rng) -> Self {
+        Self(rng.fastrand_rng.u16(Self::DOMAIN_RANGE))
     }
 }
 impl Into<Coord> for Index {
@@ -81,6 +89,11 @@ impl BitSet {
             const LAST_WORD_IDX: u16 = BitSet::WORDS - 1;
             self.words[LAST_WORD_IDX as usize] &= !0 >> DEAD_MSB as usize;
         }
+    }
+    pub fn full() -> Self {
+        let mut me = Self::default();
+        me.set_all(true);
+        me
     }
     pub fn contains(&self, bit_index: Index) -> bool {
         let (word, mask) = self.word_and_mask(bit_index);
@@ -146,11 +159,8 @@ impl Iterator for BitSetIter<'_> {
 }
 
 impl Coord {
-    pub fn random_tl_interior(rng: &mut Rng) -> Self {
-        Self { y: rng.fastrand_rng.u8(0..H - 1), x: rng.fastrand_rng.u8(0..W - 1) }
-    }
-    pub fn random_interior(rng: &mut Rng) -> Self {
-        Self { y: rng.fastrand_rng.u8(1..H - 1), x: rng.fastrand_rng.u8(1..W - 1) }
+    pub fn random(rng: &mut Rng) -> Self {
+        Index::random(rng).into()
     }
     pub fn xy(self) -> [u8; 2] {
         [self.x, self.y]
@@ -171,23 +181,20 @@ impl Coord {
     ) -> impl Iterator<Item = impl Iterator<Item = Self> + Clone> + Clone {
         (0..H).map(|y| (0..W).map(move |x| Coord { x, y }))
     }
-    pub fn iter_rightmost() -> impl Iterator<Item = Self> {
-        (0..H).map(|y| Self { x: W - 1, y })
-    }
-    pub fn iter_downmost() -> impl Iterator<Item = Self> {
-        (0..W).map(|x| Self { x, y: H - 1 })
-    }
-    pub fn try_step_tl_interior(mut self, direction: Direction) -> Option<Self> {
-        // won't allow you to step into bottom-right row
-        use Direction as Dir;
-        match direction {
-            Dir::Left if self.x > 0 => self.x -= 1,
-            Dir::Up if self.y > 0 => self.y -= 1,
-            Dir::Right if self.x < W - 2 => self.x += 1,
-            Dir::Down if self.y < H - 2 => self.y += 1,
-            _ => return None,
+    pub fn stepped(mut self, direction: Direction) -> Self {
+        let update = move |value: &mut u8| match direction.sign() {
+            Positive => *value += 1,
+            Negative => *value -= 1,
+        };
+        let update_and_correct = |value: &mut u8, bound: u8| {
+            update(value);
+            *value %= bound;
+        };
+        match direction.orientation() {
+            Vertical => update_and_correct(&mut self.y, H),
+            Horizontal => update_and_correct(&mut self.x, W),
         }
-        Some(self)
+        self
     }
 }
 

@@ -13,13 +13,6 @@ use {
 ///////////////////////////////////////////////
 // # Data types
 
-// #[derive(Copy, Clone, Debug)]
-// pub(crate) struct Coord(pub [u8; 2]);
-
-// #[derive(Eq, PartialEq, Copy, Clone)]
-// pub(crate) struct Cell {
-//     flags: u8,
-// }
 struct IncompleteRoom {
     room: Room,
     visited: BitSet,
@@ -37,15 +30,9 @@ impl Direction {
         CrossesWallInfo {
             orientation: !self.orientation(),
             managed_by_src: match self {
-                Self::Down | Self::Right => false,
-                Self::Up | Self::Left => true,
+                Down | Right => false,
+                Up | Left => true,
             },
-        }
-    }
-    pub fn orientation(self) -> Orientation {
-        match self {
-            Self::Up | Self::Down => Orientation::Vertical,
-            Self::Left | Self::Right => Orientation::Horizontal,
         }
     }
 }
@@ -53,17 +40,16 @@ impl Neg for Direction {
     type Output = Self;
     fn neg(self) -> <Self as Neg>::Output {
         match self {
-            Self::Up => Self::Down,
-            Self::Down => Self::Up,
-            Self::Right => Self::Left,
-            Self::Left => Self::Right,
+            Up => Down,
+            Down => Up,
+            Right => Left,
+            Left => Right,
         }
     }
 }
 
 impl IncompleteRoom {
     fn try_visit_from(&mut self, rng: &mut Rng, src: Coord) -> Option<(Direction, Coord)> {
-        use Direction::*;
         let mut dirs = [Up, Down, Left, Right];
         rng.shuffle_slice(&mut dirs);
         dirs.iter()
@@ -74,51 +60,35 @@ impl IncompleteRoom {
             .next()
     }
     fn try_visit_in_direction(&mut self, src: Coord, dir: Direction) -> Option<Coord> {
-        if let Some(dest) = src.try_step_tl_interior(dir) {
-            // step stays in bounds
-            if self.visited.insert(dest.into()) {
-                // successfully
-                let cwi = dir.crosses_wall_info();
-                let coord = if cwi.managed_by_src { src } else { dest };
-                self.room.wall_sets[cwi.orientation].remove(coord.into());
-                return Some(dest);
-            }
+        let dest = src.stepped(dir);
+        if self.visited.insert(dest.into()) {
+            // successfully
+            let cwi = dir.crosses_wall_info();
+            let coord = if cwi.managed_by_src { src } else { dest };
+            self.room.wall_sets[cwi.orientation].remove(coord.into());
+            Some(dest)
+        } else {
+            None
         }
-        None
     }
 }
 
 impl Room {
     pub fn wall_count(&self) -> u32 {
-        self.wall_sets[Orientation::Horizontal].len() as u32
-            + self.wall_sets[Orientation::Vertical].len() as u32
+        self.wall_sets[Horizontal].len() as u32 + self.wall_sets[Vertical].len() as u32
     }
     pub fn new(rng: &mut Rng) -> Self {
         let mut incomplete_room = IncompleteRoom {
             visited: Default::default(),
             room: Room {
                 wall_sets: enum_map::enum_map! {
-                    Orientation::Horizontal => {
-                        let mut s = BitSet::default();
-                        s.set_all(true);
-                        for coord in Coord::iter_rightmost() {
-                            s.remove(coord.into());
-                        }
-                        s
-                    },
-                    Orientation::Vertical => {
-                        let mut s = BitSet::default();
-                        s.set_all(true);
-                        for coord in Coord::iter_downmost() {
-                            s.remove(coord.into());
-                        }
-                        s
-                    },
+                    Horizontal => BitSet::full(),
+                    Vertical =>  BitSet::full(),
                 },
             },
         };
 
-        let mut at = Coord::random_tl_interior(rng);
+        let mut at = Coord::random(rng);
         incomplete_room.visited.insert(at.into());
 
         let mut step_stack = Vec::<Direction>::with_capacity(3_000);
@@ -128,27 +98,26 @@ impl Room {
                 step_stack.push(dir);
             } else if let Some(dir) = step_stack.pop() {
                 // backtrack
-                at = at.try_step_tl_interior(-dir).unwrap();
+                at = at.stepped(-dir);
             } else {
                 break;
             }
         }
-        for _ in 0..(bit_set::INDICES / 6) {
+        for _ in 0..(bit_set::INDICES / 4) {
             incomplete_room.room.wall_sets[Orientation::random(rng)]
-                .remove(Coord::random_interior(rng).into());
+                .remove(Coord::random(rng).into());
         }
         incomplete_room.room
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Orientation)> + '_ {
         let oriented_iter = move |o| self.wall_sets[o].iter().map(move |i| (i.into(), o));
-        oriented_iter(Orientation::Horizontal).chain(oriented_iter(Orientation::Vertical))
+        oriented_iter(Horizontal).chain(oriented_iter(Vertical))
     }
     pub fn ascii_print(&self) {
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
         use std::io::Write;
         for row_iter in Coord::iter_domain_lexicographic() {
-            use Orientation::*;
             for coord in row_iter.clone() {
                 let up_char =
                     if self.wall_sets[Horizontal].contains(coord.into()) { '-' } else { ' ' };
