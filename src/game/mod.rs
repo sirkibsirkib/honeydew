@@ -1,17 +1,53 @@
-mod bit_set;
+pub mod bit_set;
 pub mod room;
+
 use {
-    crate::{GameState, Orientation, Sign},
+    crate::basic::*,
     gfx_2020::{
         gfx_hal::Backend,
         winit::event::{ElementState, VirtualKeyCode},
         *,
     },
+    room::Room,
 };
+/////////////////////////////////
 
+pub struct GameState {
+    pub room: Room,
+    pub controlling: usize,
+    pub players: [Player; 1],
+    pub pressing_state: PressingState,
+    pub tex_id: TexId,
+    pub draw_infos: [DrawInfo; 1],
+}
+
+#[derive(Debug)]
+pub struct Player {
+    pub pos: Vec3,
+    pub vel: Vec3,
+}
+#[derive(Default, Debug)]
+pub struct PressingState {
+    map: enum_map::EnumMap<Orientation, AxisPressingState>,
+}
+#[derive(Copy, Clone, Debug)]
+struct AxisPressingState {
+    map: enum_map::EnumMap<Sign, ElementState>,
+}
+/////////////////////////////////
+impl Default for AxisPressingState {
+    fn default() -> Self {
+        Self {
+            map: enum_map::enum_map! {
+                Sign::Negative => ElementState::Released,
+                Sign::Positive => ElementState::Released,
+            },
+        }
+    }
+}
 impl GameState {
     pub(crate) fn calc_view_transform(pos: Vec3) -> Mat4 {
-        Mat4::from_scale(Vec3::new(0.2, 0.2, 1.0)) * Mat4::from_translation(pos)
+        Mat4::from_scale(Vec3::new(0.2, 0.2, 1.0)) * Mat4::from_translation(-pos)
     }
     fn pressing_state_update(&mut self, vkc: VirtualKeyCode, state: ElementState) -> bool {
         use {Orientation::*, Sign::*, VirtualKeyCode as Vkc};
@@ -76,5 +112,16 @@ impl DrivesMainLoop for GameState {
             _ => {}
         }
         Ok(())
+    }
+}
+
+impl AxisPressingState {
+    fn solo_pressed(self) -> Option<Sign> {
+        use {ElementState::*, Sign::*};
+        match [self.map[Negative], self.map[Positive]] {
+            [Pressed, Pressed] | [Released, Released] => None,
+            [Pressed, Released] => Some(Negative),
+            [Released, Pressed] => Some(Positive),
+        }
     }
 }

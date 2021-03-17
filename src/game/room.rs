@@ -1,280 +1,166 @@
 // # Imports and constants
 
 use {
-    crate::{rng::Rng, Orientation},
-    core::fmt::{self, Debug, Formatter},
+    crate::{
+        basic::*,
+        game::bit_set::{self, BitSet, Coord},
+        rng::Rng,
+        Orientation,
+    },
+    core::ops::Neg,
 };
 
 ///////////////////////////////////////////////
 // # Data types
 
-#[derive(Copy, Clone, Debug)]
-pub(crate) struct Coord(pub [u8; 2]);
+// #[derive(Copy, Clone, Debug)]
+// pub(crate) struct Coord(pub [u8; 2]);
 
-#[derive(Eq, PartialEq, Copy, Clone)]
-pub(crate) struct Cell {
-    flags: u8,
+// #[derive(Eq, PartialEq, Copy, Clone)]
+// pub(crate) struct Cell {
+//     flags: u8,
+// }
+struct IncompleteRoom {
+    room: Room,
+    visited: BitSet,
 }
-
-pub(crate) struct Room {
-    data: [[Cell; Self::W as usize]; Self::H as usize],
+pub struct Room {
+    pub wall_sets: enum_map::EnumMap<Orientation, BitSet>,
 }
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-///////////////////////////////////////////////
-// # associated consts
-impl Cell {
-    pub const BLOCKED: Self = Self { flags: 0b00000001 };
-    pub const WALL_UP: Self = Self { flags: 0b00000010 };
-    pub const WALL_LE: Self = Self { flags: 0b00000100 };
-    pub const TELEPOR: Self = Self { flags: 0b00001000 };
-    ////////
-    pub const OPEN: Self = Self { flags: 0b00000000 };
-    pub const CLOSED: Self = Self::BLOCKED.with(Self::WALL_UP).with(Self::WALL_LE);
-}
-impl Room {
-    pub const W: u8 = 8;
-    pub const H: u8 = 8;
-    const CELLS: u16 = Self::W as u16 * Self::H as u16;
-    const CENTER: Coord = Coord([Self::W / 2, Self::H / 2]);
+struct CrossesWallInfo {
+    orientation: Orientation,
+    managed_by_src: bool,
 }
 
-///////////////////////////////////////////////
-// # methods and functions
-
-impl Cell {
-    const fn orientation_to_wall_flag(orientation: Orientation) -> Self {
-        match orientation {
-            Orientation::Horizontal => Self::WALL_UP,
-            Orientation::Vertical => Self::WALL_LE,
-        }
-    }
-    pub const fn count_walls(self) -> u8 {
-        match [self.has_wall(Orientation::Vertical), self.has_wall(Orientation::Horizontal)] {
-            [false, false] => 0,
-            [false, true] | [true, false] => 1,
-            [true, true] => 2,
-        }
-    }
-    pub const fn with(self, rhs: Self) -> Self {
-        Self { flags: self.flags | rhs.flags }
-    }
-    pub const fn without(self, rhs: Self) -> Self {
-        Self { flags: self.flags & !rhs.flags }
-    }
-    pub const fn subset_of(self, rhs: Self) -> bool {
-        self.without(rhs).flags == 0
-    }
-    pub const fn superset_of(self, rhs: Self) -> bool {
-        rhs.subset_of(self)
-    }
-    pub const fn has_wall(self, orientation: Orientation) -> bool {
-        self.superset_of(Self::orientation_to_wall_flag(orientation))
-    }
-    pub const fn is_blocked(self) -> bool {
-        self.superset_of(Self::BLOCKED)
-    }
-    ////////
-    pub fn add(&mut self, rhs: Self) {
-        *self = self.with(rhs);
-    }
-    pub fn remove(&mut self, rhs: Self) {
-        *self = self.without(rhs);
-    }
-    pub fn remove_wall(&mut self, orientation: Orientation) {
-        self.remove(Self::orientation_to_wall_flag(orientation))
-    }
-}
-
-////////////
-impl Debug for Cell {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_set()
-            .entries(
-                if self.superset_of(Self::BLOCKED) { Some("BLOCKED") } else { None }
-                    .into_iter()
-                    .chain(if self.superset_of(Self::WALL_UP) { Some("WALL_UP") } else { None })
-                    .chain(if self.superset_of(Self::WALL_LE) { Some("WALL_LE") } else { None })
-                    .chain(if self.superset_of(Self::TELEPOR) { Some("TELEPOR") } else { None }),
-            )
-            .finish()
-    }
-}
-impl Coord {
-    pub fn iter_domain() -> impl Iterator<Item = Self> {
-        (0..Room::H).flat_map(|y| (0..Room::W).map(move |x| Self([x, y])))
-    }
-    pub fn try_step(self, dir: Direction) -> Option<Self> {
-        let Coord([x, y]) = self;
-        let xy = match dir {
-            Direction::Up if y > 0 => [x, y - 1],
-            Direction::Left if x > 0 => [x - 1, y],
-            Direction::Down if y < Room::H - 2 => [x, y + 1],
-            Direction::Right if x < Room::W - 2 => [x + 1, y],
-            _ => return None,
-        };
-        Some(Self(xy))
-    }
-}
 impl Direction {
-    pub fn invert(self) -> Self {
+    fn crosses_wall_info(self) -> CrossesWallInfo {
+        CrossesWallInfo {
+            orientation: !self.orientation(),
+            managed_by_src: match self {
+                Self::Down | Self::Right => false,
+                Self::Up | Self::Left => true,
+            },
+        }
+    }
+    pub fn orientation(self) -> Orientation {
+        match self {
+            Self::Up | Self::Down => Orientation::Vertical,
+            Self::Left | Self::Right => Orientation::Horizontal,
+        }
+    }
+}
+impl Neg for Direction {
+    type Output = Self;
+    fn neg(self) -> <Self as Neg>::Output {
         match self {
             Self::Up => Self::Down,
             Self::Down => Self::Up,
-            Self::Left => Self::Right,
             Self::Right => Self::Left,
-        }
-    }
-    fn crossed_wall_at_src(self) -> bool {
-        match self {
-            Self::Down | Self::Right => false,
-            Self::Up | Self::Left => true,
-        }
-    }
-    pub fn crosses_walls_oriented(self) -> Orientation {
-        match self {
-            Self::Up | Self::Down => Orientation::Horizontal,
-            Self::Left | Self::Right => Orientation::Vertical,
+            Self::Left => Self::Right,
         }
     }
 }
 
-impl Room {
-    fn dir_to_random_blocked_adjacent_to(
-        &self,
-        rng: &mut Rng,
-        src: Coord,
-    ) -> Option<(Direction, Coord)> {
-        let mut dirs = [Direction::Up, Direction::Down, Direction::Left, Direction::Right];
+impl IncompleteRoom {
+    fn try_visit_from(&mut self, rng: &mut Rng, src: Coord) -> Option<(Direction, Coord)> {
+        use Direction::*;
+        let mut dirs = [Up, Down, Left, Right];
         rng.shuffle_slice(&mut dirs);
-        let steps_to_blocked = move |dir: Direction| {
-            if let Some(dest) = src.try_step(dir) {
-                if self.get_cell(dest).superset_of(Cell::BLOCKED) {
-                    return Some((dir, dest));
-                }
+        dirs.iter()
+            .copied()
+            .filter_map(move |dir| {
+                self.try_visit_in_direction(src, dir).map(move |dest| (dir, dest))
+            })
+            .next()
+    }
+    fn try_visit_in_direction(&mut self, src: Coord, dir: Direction) -> Option<Coord> {
+        if let Some(dest) = src.try_step_tl_interior(dir) {
+            // step stays in bounds
+            if self.visited.insert(dest.into()) {
+                // successfully
+                let cwi = dir.crosses_wall_info();
+                let coord = if cwi.managed_by_src { src } else { dest };
+                self.room.wall_sets[cwi.orientation].remove(coord.into());
+                return Some(dest);
             }
-            None
-        };
-        dirs.iter().copied().filter_map(steps_to_blocked).next()
-    }
-    fn update_cells_with_step(&mut self, [src, dest]: [Coord; 2], dir: Direction) {
-        use Cell as Rcd;
-        self.get_mut_cell(dest).remove(Rcd::BLOCKED);
-        let coord = if dir.crossed_wall_at_src() { src } else { dest };
-        self.get_mut_cell(coord).remove_wall(dir.crosses_walls_oriented());
-    }
-    pub fn new(maybe_seed: Option<u64>) -> Self {
-        use Cell as Rcd;
-        let rng = &mut Rng::new(maybe_seed);
-        let mut me = Self { data: [[Rcd::CLOSED; Self::W as usize]; Self::H as usize] };
-        for row in me.data.iter_mut() {
-            // in every cell, rightmost cell has no UP wall
-            row.last_mut().unwrap().remove(Cell::WALL_UP)
         }
-        for cell in me.data.last_mut().unwrap() {
-            // in last row, every cell has no LEFT wall
-            cell.remove(Cell::WALL_LE)
-        }
+        None
+    }
+}
 
-        let mut at = Self::CENTER;
-        let mut step_stack = Vec::<Direction>::with_capacity(1 << 12);
-        me.get_mut_cell(at).remove(Rcd::BLOCKED);
+impl Room {
+    pub fn wall_count(&self) -> u32 {
+        self.wall_sets[Orientation::Horizontal].len() as u32
+            + self.wall_sets[Orientation::Vertical].len() as u32
+    }
+    pub fn new(rng: &mut Rng) -> Self {
+        let mut incomplete_room = IncompleteRoom {
+            visited: Default::default(),
+            room: Room {
+                wall_sets: enum_map::enum_map! {
+                    Orientation::Horizontal => {
+                        let mut s = BitSet::default();
+                        s.set_all(true);
+                        for coord in Coord::iter_rightmost() {
+                            s.remove(coord.into());
+                        }
+                        s
+                    },
+                    Orientation::Vertical => {
+                        let mut s = BitSet::default();
+                        s.set_all(true);
+                        for coord in Coord::iter_downmost() {
+                            s.remove(coord.into());
+                        }
+                        s
+                    },
+                },
+            },
+        };
+
+        let mut at = Coord::random_tl_interior(rng);
+        incomplete_room.visited.insert(at.into());
+
+        let mut step_stack = Vec::<Direction>::with_capacity(3_000);
         loop {
-            if let Some((dir, dest)) = me.dir_to_random_blocked_adjacent_to(rng, at) {
-                me.update_cells_with_step([at, dest], dir);
+            if let Some((dir, dest)) = incomplete_room.try_visit_from(rng, at) {
                 at = dest;
                 step_stack.push(dir);
             } else if let Some(dir) = step_stack.pop() {
                 // backtrack
-                at = at.try_step(dir.invert()).unwrap();
+                at = at.try_step_tl_interior(-dir).unwrap();
             } else {
                 break;
             }
         }
-        for _ in 0..(Room::CELLS / 8) {
-            let flag = if rng.gen_bool() { Rcd::WALL_LE } else { Rcd::WALL_UP };
-            let coord = Coord([
-                rng.fastrand_rng.u8(1..Room::W - 1), // x
-                rng.fastrand_rng.u8(1..Room::H - 1),
-            ]);
-            me.get_mut_cell(coord).remove(flag);
+        for _ in 0..(bit_set::INDICES / 6) {
+            incomplete_room.room.wall_sets[Orientation::random(rng)]
+                .remove(Coord::random_interior(rng).into());
         }
-        me
-    }
-    pub fn iter_cells(&self) -> impl Iterator<Item = Cell> + '_ {
-        self.data.iter().flatten().copied()
+        incomplete_room.room
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Orientation)> + '_ {
-        Coord::iter_domain().zip(self.iter_cells()).flat_map(|(coord, cell)| {
-            Orientation::iter_domain().filter_map(move |orientation| {
-                if cell.has_wall(orientation) {
-                    Some((coord, orientation))
-                } else {
-                    None
-                }
-            })
-        })
-    }
-    pub fn get_mut_cell(&mut self, Coord([x, y]): Coord) -> &mut Cell {
-        &mut self.data[y as usize][x as usize]
-    }
-    pub fn get_cell(&self, Coord([x, y]): Coord) -> Cell {
-        self.data[y as usize][x as usize]
+        let oriented_iter = move |o| self.wall_sets[o].iter().map(move |i| (i.into(), o));
+        oriented_iter(Orientation::Horizontal).chain(oriented_iter(Orientation::Vertical))
     }
     pub fn ascii_print(&self) {
-        // for c in self.iter_cells() {
-        //     println!("{:?}", c);
-        // }
-        // for c in self.iter_walls() {
-        //     println!("{:?}", c);
-        // }
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
         use std::io::Write;
-        for row in self.data.iter() {
-            // one row for vertical walls
-            for cell in row.iter() {
-                let up_char = if cell.has_wall(Orientation::Horizontal) { '-' } else { ' ' };
+        for row_iter in Coord::iter_domain_lexicographic() {
+            use Orientation::*;
+            for coord in row_iter.clone() {
+                let up_char =
+                    if self.wall_sets[Horizontal].contains(coord.into()) { '-' } else { ' ' };
                 let _ = write!(stdout, "·{}{}", up_char, up_char);
             }
             let _ = writeln!(stdout);
-            // one row for horizontal walls & blockages
-            for cell in row.iter() {
-                let left_char = if cell.has_wall(Orientation::Vertical) { '|' } else { ' ' };
-                let blocked_char = if cell.is_blocked() { '#' } else { ' ' };
-                let _ = write!(stdout, "{}{}{}", left_char, blocked_char, blocked_char);
+            for coord in row_iter {
+                let left_char =
+                    if self.wall_sets[Vertical].contains(coord.into()) { '|' } else { ' ' };
+                let _ = write!(stdout, "{}  ", left_char);
             }
             let _ = writeln!(stdout);
         }
     }
-    // pub fn ascii_print2(&self) {
-    //     println!();
-    //     let mut ascii_chars = [[b' '; Self::W as usize * 3]; Self::H as usize * 2];
-    //     let stdout = std::io::stdout();
-    //     let mut stdout = stdout.lock();
-    //     use std::io::Write;
-
-    //     for (coord, orientation) in self.iter_walls() {
-    //         let [x, y] = [coord.0[0] as usize, coord.0[1] as usize];
-    //         match orientation {
-    //             Orientation::Horizontal => {
-    //                 ascii_chars[y * 2][x * 3 + 1] = b'-';
-    //                 ascii_chars[y * 2][x * 3 + 2] = b'-';
-    //             }
-    //             Orientation::Vertical => {
-    //                 ascii_chars[y * 2 + 1][x * 3 + 0] = b'|';
-    //             }
-    //         }
-    //     }
-
-    //     for row in ascii_chars.iter() {
-    //         let _ = writeln!(stdout, "{}", std::str::from_utf8(row).unwrap());
-    //     }
-    // }
 }

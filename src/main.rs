@@ -1,79 +1,24 @@
 ////////////////////////////
+mod basic;
 mod game;
 mod rng;
+
 use {
-    crate::game::room::{Cell, Coord, Room},
+    crate::{
+        basic::*,
+        game::{bit_set::Coord, room::Room, GameState, Player},
+        rng::Rng,
+    },
     gfx_2020::{
         gfx_hal::{pso::Face, window::Extent2D, Backend},
         vert_coord_consts::UNIT_QUAD,
-        winit::event::ElementState,
-        DrawInfo, TexId, Vec3, *,
+        DrawInfo, Vec3, *,
     },
     gfx_backend_vulkan::Backend as VulkanBackend,
 };
 /////////////////////////////////
 
-#[derive(Copy, Clone, Debug, enum_map::Enum)]
-enum Orientation {
-    Horizontal,
-    Vertical,
-}
-
-#[derive(Copy, Clone, Debug, enum_map::Enum)]
-enum Sign {
-    Positive,
-    Negative,
-}
-
-struct GameState {
-    room: Room,
-    tex_id: TexId,
-    controlling: usize,
-    players: [Player; 1],
-    pressing_state: PressingState,
-    draw_infos: [DrawInfo; 1],
-}
-
-#[derive(Debug)]
-struct Player {
-    pos: Vec3,
-    vel: Vec3,
-}
-#[derive(Default, Debug)]
-struct PressingState {
-    map: enum_map::EnumMap<Orientation, AxisPressingState>,
-}
-#[derive(Copy, Clone, Debug)]
-struct AxisPressingState {
-    map: enum_map::EnumMap<Sign, ElementState>,
-}
-
 /////////////////////////////
-impl Default for AxisPressingState {
-    fn default() -> Self {
-        Self {
-            map: enum_map::enum_map! {
-                Sign::Negative => ElementState::Released,
-                Sign::Positive => ElementState::Released,
-            },
-        }
-    }
-}
-impl Orientation {
-    pub fn iter_domain() -> impl Iterator<Item = Self> {
-        [Self::Horizontal, Self::Vertical].iter().copied()
-    }
-}
-impl AxisPressingState {
-    fn solo_pressed(self) -> Option<Sign> {
-        use {ElementState::*, Sign::*};
-        match [self.map[Negative], self.map[Positive]] {
-            [Pressed, Pressed] | [Released, Released] => None,
-            [Pressed, Released] => Some(Negative),
-            [Released, Pressed] => Some(Positive),
-        }
-    }
-}
 
 fn render_config() -> RendererConfig<'static> {
     RendererConfig {
@@ -99,14 +44,15 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 ) -> ProceedWith<&'static mut GameState> {
     let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
     let tex_id = renderer.load_texture(&texture);
-    let room = Room::new(Some(0));
+    let mut rng = Rng::new(Some(0));
+    let room = Room::new(&mut rng);
     room.ascii_print();
-
-    let wall_count: u32 = room.iter_cells().map(Cell::count_walls).map(|x| x as u32).sum();
+    let wall_count = room.wall_count();
     let instance_count = wall_count + 1;
 
     let tri_vert_iter = UNIT_QUAD.iter().copied();
-    let wall_transform_iter = room.iter_walls().map(|(Coord([x, y]), orientation)| {
+    let wall_transform_iter = room.iter_walls().map(|(coord, orientation)| {
+        let [x, y] = coord.xy();
         let [mut tx, mut ty] = [x as f32, y as f32];
         let (coord, rot) = match orientation {
             Orientation::Horizontal => (&mut ty, 0.), // up walls are moved UP and NOT rotated
@@ -130,7 +76,10 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 
     let controlling = 0;
     let players = [Player {
-        pos: Vec3::new(Room::W as f32 * -0.5, Room::H as f32 * -0.5, 0.),
+        pos: {
+            let [x, y] = Coord::random_tl_interior(&mut rng).xy();
+            Vec3::new(x as f32, y as f32, 0.)
+        },
         vel: Vec3::from([0.; 3]),
     }];
     let draw_infos = [DrawInfo {
@@ -150,5 +99,5 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 }
 
 fn main() {
-    gfx_2020::main_loop::<VulkanBackend, _, _>(&render_config(), game_state_init_fn)
+    gfx_2020::main_loop::<VulkanBackend, _, _>(&render_config(), game_state_init_fn);
 }
