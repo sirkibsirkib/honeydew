@@ -49,7 +49,14 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
     let tex_id = renderer.load_texture(&texture);
     let mut rng = Rng::new(Some(0));
-    let room = Room::new(&mut rng);
+    // let room = Room::new(&mut rng);
+    // TEMP: collision detection!
+    let room = Room {
+        wall_sets: enum_map::enum_map! {
+            Horizontal => [[2,2]].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
+            Vertical => [].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
+        },
+    };
     room.ascii_print();
     let wall_count = room.wall_count();
     let player_count = 3;
@@ -65,9 +72,10 @@ pub(crate) fn game_state_init_fn<B: Backend>(
             Orientation::Vertical => (&mut tx, std::f32::consts::PI * -0.5), // left walls are moved LEFT and are ARE rotated 90 degrees
         };
         *value -= 0.5;
+        let [sx, sy] = game::UP_WALL_SIZE;
         Mat4::from_translation(Vec3::new(tx, ty, 0.))
             * Mat4::from_rotation_z(rot)
-            * Mat4::from_scale(Vec3::new(1.0, 0.16, 1.0))
+            * Mat4::from_scale(Vec3::new(sx, sy, 1.0))
     });
 
     fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
@@ -77,7 +85,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let wall_tex_scissor_iter =
         std::iter::repeat(scissor_for_tile_at([0, 0])).take(wall_count as usize);
     let player_tex_scissor_iter =
-        std::iter::repeat(scissor_for_tile_at([3, 0])).take(wall_count as usize);
+        std::iter::repeat(scissor_for_tile_at([3, 0])).take(player_count as usize);
 
     renderer.write_vertex_buffer(0, tri_vert_iter);
     renderer.write_vertex_buffer(0, wall_transform_iter);
@@ -97,7 +105,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
                 }
                 break 'pos_guess pos;
             };
-            players.push(Player { pos, vel: Vec3::default() });
+            players.push(Player { pos, vel: Default::default() });
         }
         players
     };

@@ -3,6 +3,7 @@ pub mod room;
 
 use {
     crate::basic::*,
+    bit_set::Coord,
     gfx_2020::{
         gfx_hal::Backend,
         winit::event::{ElementState, VirtualKeyCode},
@@ -10,6 +11,9 @@ use {
     },
     room::Room,
 };
+
+pub const PLAYER_SIZE: [f32; 2] = [0.5, 0.5];
+pub const UP_WALL_SIZE: [f32; 2] = [1.0, 0.16];
 
 // allows an upper bound for renderer's instance buffers
 pub const PLAYER_CAP: u32 = 32;
@@ -28,15 +32,15 @@ pub struct GameState {
 #[derive(Debug)]
 pub struct Player {
     pub pos: Vec3,
-    pub vel: Vec3,
+    pub vel: EnumMap<Orientation, Option<Sign>>,
 }
 #[derive(Default, Debug)]
 pub struct PressingState {
-    map: enum_map::EnumMap<Orientation, AxisPressingState>,
+    map: EnumMap<Orientation, AxisPressingState>,
 }
 #[derive(Copy, Clone, Debug)]
 struct AxisPressingState {
-    map: enum_map::EnumMap<Sign, ElementState>,
+    map: EnumMap<Sign, ElementState>,
 }
 /////////////////////////////////
 impl Default for AxisPressingState {
@@ -50,7 +54,7 @@ impl Default for AxisPressingState {
     }
 }
 impl GameState {
-    fn update_player_positions(&mut self) {
+    fn update_player_data(&mut self) {
         fn wrap_value(value: &mut f32, bound: f32) {
             if *value < 0. {
                 *value += bound;
@@ -58,8 +62,28 @@ impl GameState {
                 *value -= bound;
             }
         };
+        // 1. update my velocity
+        for ori in Orientation::iter_domain() {
+            self.players[self.controlling].vel[ori] = self.pressing_state.map[ori].solo_pressed();
+        }
+
         for player in self.players.iter_mut() {
-            player.pos += player.vel;
+            // collision detection
+            let at = Coord::new_checked([player.pos[0] as u8, player.pos[1] as u8]).unwrap();
+            for ori in Orientation::iter_domain() {
+                if let Some(sign) = player.vel[ori] {
+                    let wall_at = at.wall_if_stepped(Direction::new(ori, sign));
+                    if self.room.wall_sets[!ori].contains(wall_at.into()) {
+                        player.vel[ori] = None;
+                    }
+                }
+            }
+            // moving
+            for ori in Orientation::iter_domain() {
+                if let Some(sign) = player.vel[ori] {
+                    player.pos[ori.vec3_index()] += sign * 0.05;
+                }
+            }
             wrap_value(&mut player.pos[0], bit_set::W as f32);
             wrap_value(&mut player.pos[1], bit_set::H as f32);
         }
@@ -68,12 +92,13 @@ impl GameState {
         renderer.write_vertex_buffer(
             self.player_instances_start,
             self.players.iter().map(|player| {
-                Mat4::from_translation(player.pos) * Mat4::from_scale(Vec3::new(0.7, 0.7, 1.))
+                let [sx, sy] = PLAYER_SIZE;
+                Mat4::from_translation(player.pos) * Mat4::from_scale(Vec3::new(sx, sy, 1.))
             }),
         );
     }
     pub(crate) fn update_view_transforms(&mut self) {
-        const SCALE_XY: [f32; 2] = [1. / 6.; 2];
+        const SCALE_XY: [f32; 2] = [1. / 16.; 2];
         let translations = {
             const W: f32 = bit_set::W as f32;
             const H: f32 = bit_set::H as f32;
@@ -102,8 +127,6 @@ impl GameState {
     }
     fn pressing_state_update(&mut self, vkc: VirtualKeyCode, state: ElementState) -> bool {
         use VirtualKeyCode as Vkc;
-        const SPEED: f32 = 0.05;
-
         let (orientation, sign) = match vkc {
             Vkc::W => (Vertical, Negative),
             Vkc::A => (Horizontal, Negative),
@@ -111,18 +134,7 @@ impl GameState {
             Vkc::D => (Horizontal, Positive),
             _ => return false,
         };
-        let value = &mut self.pressing_state.map[orientation].map[sign];
-        if *value != state {
-            *value = state;
-            self.players[self.controlling].vel[match orientation {
-                Horizontal => 0,
-                Vertical => 1,
-            }] = match self.pressing_state.map[orientation].solo_pressed() {
-                Some(Positive) => SPEED,
-                Some(Negative) => -SPEED,
-                None => 0.,
-            };
-        }
+        self.pressing_state.map[orientation].map[sign] = state;
         true
     }
 }
@@ -133,7 +145,7 @@ impl DrivesMainLoop for GameState {
     }
 
     fn update<B: Backend>(&mut self, renderer: &mut Renderer<B>) -> Proceed {
-        self.update_player_positions();
+        self.update_player_data();
         self.update_player_transforms(renderer);
         self.update_view_transforms();
         Ok(())

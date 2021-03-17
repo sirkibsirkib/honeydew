@@ -1,7 +1,10 @@
-use crate::{basic::*, rng::Rng};
+use {
+    crate::{basic::*, rng::Rng},
+    core::iter::FromIterator,
+};
 
-pub const W: u8 = 16;
-pub const H: u8 = 16;
+pub const W: u8 = 8;
+pub const H: u8 = 8;
 pub const INDICES: u16 = W as u16 * H as u16;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -40,6 +43,21 @@ impl SplitIndex {
 }
 const fn div_round_up(x: u16, y: u16) -> u16 {
     (x + y - 1) / y
+}
+
+impl FromIterator<Index> for BitSet {
+    fn from_iter<I: IntoIterator<Item = Index>>(iter: I) -> Self {
+        let mut bs = BitSet::default();
+        for i in iter {
+            bs.insert(i);
+        }
+        bs
+    }
+}
+impl FromIterator<Coord> for BitSet {
+    fn from_iter<I: IntoIterator<Item = Coord>>(iter: I) -> Self {
+        Self::from_iter(iter.into_iter().map(Into::<Index>::into))
+    }
 }
 
 impl Index {
@@ -159,6 +177,16 @@ impl Iterator for BitSetIter<'_> {
 }
 
 impl Coord {
+    pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
+        match dir.sign() {
+            Negative => {}
+            Positive => match dir.orientation() {
+                Horizontal => self.x = (self.x + 1) % W,
+                Vertical => self.y = (self.y + 1) % H,
+            },
+        }
+        self
+    }
     pub fn random(rng: &mut Rng) -> Self {
         Index::random(rng).into()
     }

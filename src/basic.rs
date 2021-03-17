@@ -1,5 +1,8 @@
-use {crate::rng::Rng, core::ops::Not};
-pub use {core::ops::Range, Direction::*, Orientation::*, Sign::*};
+use {
+    crate::rng::Rng,
+    core::ops::{Mul, Not},
+};
+pub use {core::ops::Range, enum_map::EnumMap, Direction::*, Orientation::*, Sign::*};
 
 ////////////////////////////////
 #[derive(Debug, Copy, Clone)]
@@ -23,38 +26,63 @@ pub enum Sign {
 }
 
 /////////////////////////
-
+impl Mul<f32> for Sign {
+    type Output = f32;
+    fn mul(self, rhs: f32) -> <Self as Mul<f32>>::Output {
+        match self {
+            Positive => rhs,
+            Negative => -rhs,
+        }
+    }
+}
 impl Not for Orientation {
     type Output = Self;
     fn not(self) -> <Self as Not>::Output {
         match self {
-            Self::Vertical => Self::Horizontal,
-            Self::Horizontal => Self::Vertical,
+            Vertical => Horizontal,
+            Horizontal => Vertical,
         }
     }
 }
 
 impl Orientation {
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        [Horizontal, Vertical].iter().copied()
+    }
     pub fn random(rng: &mut Rng) -> Self {
         if rng.gen_bool() {
-            Self::Horizontal
+            Horizontal
         } else {
-            Self::Vertical
+            Vertical
+        }
+    }
+    pub const fn vec3_index(self) -> usize {
+        match self {
+            Horizontal => 0,
+            Vertical => 1,
         }
     }
 }
 
 impl Direction {
+    pub const fn new(ori: Orientation, sign: Sign) -> Self {
+        match (ori, sign) {
+            (Horizontal, Negative) => Left,
+            (Horizontal, Positive) => Right,
+            (Vertical, Negative) => Up,
+            (Vertical, Positive) => Down,
+        }
+    }
     pub const fn orientation(self) -> Orientation {
         match self {
-            Self::Up | Self::Down => Orientation::Vertical,
-            Self::Left | Self::Right => Orientation::Horizontal,
+            Up | Down => Orientation::Vertical,
+            Left | Right => Orientation::Horizontal,
         }
     }
     pub const fn sign(self) -> Sign {
         match self {
-            Self::Up | Self::Left => Sign::Negative,
-            Self::Down | Self::Right => Sign::Positive,
+            Up | Left => Negative,
+            Down | Right => Positive,
         }
     }
 }

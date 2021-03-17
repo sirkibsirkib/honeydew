@@ -18,7 +18,7 @@ struct IncompleteRoom {
     visited: BitSet,
 }
 pub struct Room {
-    pub wall_sets: enum_map::EnumMap<Orientation, BitSet>,
+    pub wall_sets: EnumMap<Orientation, BitSet>,
 }
 struct CrossesWallInfo {
     orientation: Orientation,
