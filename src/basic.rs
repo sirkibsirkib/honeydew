@@ -72,6 +72,9 @@ impl Not for Orientation {
 }
 
 impl Orientation {
+    pub fn sign(self, sign: Sign) -> Direction {
+        Direction::new(self, sign)
+    }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
         [Horizontal, Vertical].iter().copied()
     }

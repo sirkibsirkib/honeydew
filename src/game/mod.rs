@@ -60,6 +60,18 @@ impl Default for AxisPressingState {
     }
 }
 impl GameState {
+    pub fn wrap_pos(pos: &mut Vec2) {
+        const BOUND: Vec2 = Vec2 { x: bit_set::W as f32, y: bit_set::H as f32 };
+        for idx in Orientation::iter_domain().map(Orientation::vec_index) {
+            let value = &mut pos[idx];
+            let bound = BOUND[idx];
+            if *value < 0. {
+                *value += bound;
+            } else if bound < *value {
+                *value -= bound;
+            }
+        }
+    }
     fn wall_min_dists(ori: Orientation) -> Vec2 {
         (Self::wall_size(ori) + PLAYER_SIZE) * 0.5
     }
@@ -70,17 +82,19 @@ impl GameState {
         }
     }
     pub fn wall_pos(coord: Coord, ori: Orientation) -> Vec2 {
+        // e.g. Horizontal wall at Coord[0,0] has pos [0.5, 0.0]
         let mut pos: Vec2 = coord.into();
-        pos[ori.vec_index()] -= 0.5;
+        pos[ori.vec_index()] += 0.5;
         pos
     }
-    fn collide_with(a_pos: &mut Vec2, b_pos: Vec2, min_dists: Vec2) {
+    fn collide_with(a_pos: &mut Vec2, b_pos: Vec2, min_dists: Vec2) -> bool {
+        const MIN_DELTA: f32 = 0.01;
         let a_rel = *a_pos - b_pos; // position of A relative to position of B
-        let no_collision = Orientation::iter_domain()
+        let colliding = Orientation::iter_domain()
             .map(Orientation::vec_index)
-            .any(|idx| min_dists[idx] <= a_rel[idx].abs());
-        if no_collision {
-            return;
+            .all(|idx| a_rel[idx].abs() + MIN_DELTA < min_dists[idx]);
+        if !colliding {
+            return false;
         }
         let (idx, correction) = Orientation::iter_domain()
             .map(|ori| {
@@ -94,6 +108,7 @@ impl GameState {
             .min_by_key(|(_, correction)| OrderedFloat(correction.abs()))
             .unwrap();
         a_pos[idx] += correction;
+        true
     }
     fn update_player_data(&mut self) {
         // 1. update my velocity
@@ -112,11 +127,13 @@ impl GameState {
 
         // correct player positions wrt. player<->player collisions
         for [a, b] in iter_pairs_mut(&mut self.players) {
-            Self::collide_with(&mut a.pos, b.pos, PLAYER_SIZE)
+            Self::collide_with(&mut a.pos, b.pos, PLAYER_SIZE);
         }
 
         for player in &mut self.players {
             // wrap player positions
+            Self::wrap_pos(&mut player.pos);
+            // resolve collisions
             const BOUND: Vec2 = Vec2 { x: bit_set::W as f32, y: bit_set::H as f32 };
             for idx in Orientation::iter_domain().map(Orientation::vec_index) {
                 let value = &mut player.pos[idx];
@@ -128,14 +145,20 @@ impl GameState {
                 }
             }
             // correct position wrt. player<->wall collisions
-            for coord in Into::<Coord>::into(player.pos).nine_grid_iter() {
-                for ori in Orientation::iter_domain() {
+            let at: Coord = (player.pos + Vec2::from([0.5; 2])).into();
+            for ori in Orientation::iter_domain() {
+                // Eg: check for horizontal walls in THIS cell, cell to the left, and cell to the right
+                let check_at = [at.stepped(ori.sign(Negative)), at, at.stepped(ori.sign(Positive))];
+                for &coord in check_at.iter() {
                     if self.room.wall_sets[ori].contains(coord.into()) {
-                        Self::collide_with(
+                        let collided = Self::collide_with(
                             &mut player.pos,
                             Self::wall_pos(coord, ori),
                             Self::wall_min_dists(ori),
-                        )
+                        );
+                        if collided {
+                            Self::wrap_pos(&mut player.pos);
+                        }
                     }
                 }
             }
@@ -151,7 +174,7 @@ impl GameState {
         );
     }
     pub(crate) fn update_view_transforms(&mut self) {
-        const SCALE: f32 = 1. / 16.;
+        const SCALE: f32 = 1. / 6.;
         const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
         let translations = {
             const W: f32 = bit_set::W as f32;

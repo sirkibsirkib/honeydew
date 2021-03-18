@@ -3,6 +3,7 @@ mod basic;
 mod game;
 mod rng;
 
+use crate::bit_set::BitSet;
 use {
     crate::{
         basic::*,
@@ -50,9 +51,15 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let tex_id = renderer.load_texture(&texture);
     let mut rng = Rng::new(Some(0));
     let room = Room::new(&mut rng);
+    // let room = Room {
+    //     wall_sets: enum_map::enum_map! {
+    //         Horizontal => BitSet::default(),
+    //         Vertical => Some(Coord::new([5, 5])).into_iter().collect(),
+    //     },
+    // };
     room.ascii_print();
     let wall_count = room.wall_count();
-    let player_count = 3;
+    let player_count = 1;
     assert!(player_count <= game::PLAYER_CAP);
     let instance_count = wall_count + player_count;
 

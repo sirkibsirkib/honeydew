@@ -3,8 +3,8 @@ use {
     core::iter::FromIterator,
 };
 
-pub const W: u8 = 8;
-pub const H: u8 = 8;
+pub const W: u8 = 16;
+pub const H: u8 = 16;
 pub const INDICES: u16 = W as u16 * H as u16;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -193,8 +193,7 @@ impl Coord {
     pub const fn xy(self) -> [u8; 2] {
         [self.x, self.y]
     }
-    #[inline]
-    pub fn new([mut x, mut y]: [u8; 2]) -> Self {
+    pub const fn new([mut x, mut y]: [u8; 2]) -> Self {
         x %= W;
         y %= H;
         Self { x, y }
@@ -206,24 +205,14 @@ impl Coord {
     ) -> impl Iterator<Item = impl Iterator<Item = Self> + Clone> + Clone {
         (0..H).map(|y| (0..W).map(move |x| Coord { x, y }))
     }
-    pub fn stepped(mut self, direction: Direction) -> Self {
-        let update = move |value: &mut u8| match direction.sign() {
-            Positive => *value += 1,
-            Negative => *value -= 1,
-        };
-        let update_and_correct = |value: &mut u8, bound: u8| {
-            update(value);
-            *value %= bound;
-        };
-        match direction.orientation() {
-            Vertical => update_and_correct(&mut self.y, H),
-            Horizontal => update_and_correct(&mut self.x, W),
-        }
-        self
-    }
-    pub fn nine_grid_iter(self) -> impl Iterator<Item = Self> {
-        (0u8..=2)
-            .flat_map(move |y| (0u8..=2).map(move |x| Self::new([self.x - 1 + x, self.y - 1 + y])))
+    pub const fn stepped(self, dir: Direction) -> Self {
+        let Self { x, y } = self;
+        Self::new(match dir {
+            Up => [x, y.wrapping_sub(1)],
+            Down => [x, y + 1],
+            Left => [x.wrapping_sub(1), y],
+            Right => [x + 1, y],
+        })
     }
 }
 
