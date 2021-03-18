@@ -50,13 +50,6 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let tex_id = renderer.load_texture(&texture);
     let mut rng = Rng::new(Some(0));
     let room = Room::new(&mut rng);
-    // TEMP: collision detection!
-    // let room = Room {
-    //     wall_sets: enum_map::enum_map! {
-    //         Horizontal => [[2,2]].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
-    //         Vertical => [].iter().copied().map(Coord::new_checked).map(Option::unwrap).collect(),
-    //     },
-    // };
     room.ascii_print();
     let wall_count = room.wall_count();
     let player_count = 3;
@@ -64,16 +57,9 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let instance_count = wall_count + player_count;
 
     let tri_vert_iter = UNIT_QUAD.iter().copied();
-    let wall_transform_iter = room.iter_walls().map(|(coord, orientation)| {
-        let [x, y] = coord.xy();
-        let mut xy = Vec2::new(x as f32, y as f32);
-        let (value, rot) = match orientation {
-            Orientation::Horizontal => (&mut xy[1], 0.), // up walls are moved UP and NOT rotated
-            Orientation::Vertical => (&mut xy[0], std::f32::consts::PI * -0.5), // left walls are moved LEFT and are ARE rotated 90 degrees
-        };
-        *value -= 0.5;
-        Mat4::from_translation(xy.extend(0.))
-            * Mat4::from_rotation_z(rot)
+    let wall_transform_iter = room.iter_walls().map(|(coord, ori)| {
+        Mat4::from_translation(GameState::wall_pos(coord, ori).extend(0.))
+            * Mat4::from_rotation_z(if let Vertical = ori { PI_F32 * -0.5 } else { 0. })
             * Mat4::from_scale(game::UP_WALL_SIZE.extend(1.))
     });
 

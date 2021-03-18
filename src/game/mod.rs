@@ -48,14 +48,7 @@ struct Rect {
     size: Vec2,
 }
 /////////////////////////////////
-impl Rect {
-    fn collider_with(&self, size: Vec2) -> Self {
-        Self { center: self.center, size: self.size + size }
-    }
-    fn realign_center(&self, center: &mut Vec2) -> bool {
-        todo!()
-    }
-}
+
 impl Default for AxisPressingState {
     fn default() -> Self {
         Self {
@@ -67,50 +60,83 @@ impl Default for AxisPressingState {
     }
 }
 impl GameState {
+    fn wall_min_dists(ori: Orientation) -> Vec2 {
+        (Self::wall_size(ori) + PLAYER_SIZE) * 0.5
+    }
+    pub fn wall_size(ori: Orientation) -> Vec2 {
+        match ori {
+            Horizontal => UP_WALL_SIZE,
+            Vertical => UP_WALL_SIZE.yx(),
+        }
+    }
+    pub fn wall_pos(coord: Coord, ori: Orientation) -> Vec2 {
+        let mut pos: Vec2 = coord.into();
+        pos[ori.vec_index()] -= 0.5;
+        pos
+    }
+    fn collide_with(a_pos: &mut Vec2, b_pos: Vec2, min_dists: Vec2) {
+        let a_rel = *a_pos - b_pos; // position of A relative to position of B
+        let no_collision = Orientation::iter_domain()
+            .map(Orientation::vec_index)
+            .any(|idx| min_dists[idx] <= a_rel[idx].abs());
+        if no_collision {
+            return;
+        }
+        let (idx, correction) = Orientation::iter_domain()
+            .map(|ori| {
+                let idx = ori.vec_index();
+                let a_rel = a_rel[idx];
+                let min_dist = min_dists[idx];
+                let a_corrected = if 0. < a_rel { min_dist } else { -min_dist };
+                let correction = a_corrected - a_rel;
+                (idx, correction)
+            })
+            .min_by_key(|(_, correction)| OrderedFloat(correction.abs()))
+            .unwrap();
+        a_pos[idx] += correction;
+    }
     fn update_player_data(&mut self) {
         // 1. update my velocity
         for ori in Orientation::iter_domain() {
             self.players[self.controlling].vel[ori] = self.pressing_state.map[ori].solo_pressed();
         }
 
-        for player in self.players.iter_mut() {
-            // movement
+        // update player positions wrt. movement
+        for player in &mut self.players {
             for ori in Orientation::iter_domain() {
                 if let Some(sign) = player.vel[ori] {
                     player.pos[ori.vec_index()] += sign * 0.05;
                 }
             }
+        }
 
-            // collision detection
-            /*
-            When checking a DIRECTED collision between rectangles active A and passive P,
-            (assuming each has a Vec2 .center)
-            there are 8 collision cases between the player and the wall
-            the objective is to make the SMALLEST change necessary to resolve the collision.
-            so we
+        // correct player positions wrt. player<->player collisions
+        for [a, b] in iter_pairs_mut(&mut self.players) {
+            Self::collide_with(&mut a.pos, b.pos, PLAYER_SIZE)
+        }
 
-
-            */
-            loop {
-                let mut smallest_correction = Option::<(Orientation, f32)>::None;
-                todo!();
-                if let Some((ori, delta)) = smallest_correction {
-                    player.pos[ori.vec_index()] += delta;
-                    // continue correcting!
-                } else {
-                    break;
-                }
-            }
-
-            // wrap position
+        for player in &mut self.players {
+            // wrap player positions
             const BOUND: Vec2 = Vec2 { x: bit_set::W as f32, y: bit_set::H as f32 };
-            for ori in Orientation::iter_domain() {
-                let value = &mut player.pos[ori.vec_index()];
-                let bound = BOUND[ori.vec_index()];
+            for idx in Orientation::iter_domain().map(Orientation::vec_index) {
+                let value = &mut player.pos[idx];
+                let bound = BOUND[idx];
                 if *value < 0. {
                     *value += bound;
                 } else if bound < *value {
                     *value -= bound;
+                }
+            }
+            // correct position wrt. player<->wall collisions
+            for coord in Into::<Coord>::into(player.pos).nine_grid_iter() {
+                for ori in Orientation::iter_domain() {
+                    if self.room.wall_sets[ori].contains(coord.into()) {
+                        Self::collide_with(
+                            &mut player.pos,
+                            Self::wall_pos(coord, ori),
+                            Self::wall_min_dists(ori),
+                        )
+                    }
                 }
             }
         }

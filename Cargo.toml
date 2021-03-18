@@ -11,3 +11,4 @@ fastrand = "1.4.0"
 gfx_2020 = { path="../gfx_2020" }
 gfx-backend-vulkan = "0.6.5"
 enum-map = "0.6.4"
+ordered-float = "2.1.1"

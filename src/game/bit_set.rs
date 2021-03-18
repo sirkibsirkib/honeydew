@@ -176,11 +176,6 @@ impl Iterator for BitSetIter<'_> {
     }
 }
 
-impl Into<Vec2> for Coord {
-    fn into(self) -> Vec2 {
-        Vec2 { x: self.x as f32, y: self.y as f32 }
-    }
-}
 impl Coord {
     pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
         match dir.sign() {
@@ -199,13 +194,10 @@ impl Coord {
         [self.x, self.y]
     }
     #[inline]
-    pub fn new_checked([x, y]: [u8; 2]) -> Option<Self> {
-        if x < W && y < H {
-            // invariant established
-            Some(Self { x, y })
-        } else {
-            None
-        }
+    pub fn new([mut x, mut y]: [u8; 2]) -> Self {
+        x %= W;
+        y %= H;
+        Self { x, y }
     }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
         Index::iter_domain().map(Into::into)
@@ -229,10 +221,25 @@ impl Coord {
         }
         self
     }
+    pub fn nine_grid_iter(self) -> impl Iterator<Item = Self> {
+        (0u8..=2)
+            .flat_map(move |y| (0u8..=2).map(move |x| Self::new([self.x - 1 + x, self.y - 1 + y])))
+    }
 }
 
 impl Into<Index> for Coord {
     fn into(self) -> Index {
         Index(self.y as u16 * W as u16 + self.x as u16)
+    }
+}
+
+impl Into<Vec2> for Coord {
+    fn into(self) -> Vec2 {
+        Vec2::new(self.x as f32, self.y as f32)
+    }
+}
+impl Into<Coord> for Vec2 {
+    fn into(self) -> Coord {
+        Coord::new([self.x as u8, self.y as u8])
     }
 }

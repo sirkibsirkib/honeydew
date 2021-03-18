@@ -3,13 +3,27 @@ use {
     core::ops::{Mul, Not},
 };
 pub use {
-    core::ops::Range,
+    core::{cmp::Ordering, f32::consts::PI as PI_F32, ops::Range},
     enum_map::EnumMap,
-    gfx_2020::{Vec2, Vec3},
+    gfx_2020::{glam::Vec2Swizzles, Vec2, Vec3},
+    ordered_float::OrderedFloat,
     Direction::*,
     Orientation::*,
     Sign::*,
 };
+
+pub fn iter_pairs<T>(slice: &[T]) -> impl Iterator<Item = [&T; 2]> {
+    (0..slice.len() - 1).flat_map(move |left| {
+        (left + 1..slice.len())
+            .map(move |right| unsafe { [slice.get_unchecked(left), slice.get_unchecked(right)] })
+    })
+}
+pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
+    let p = slice.as_mut_ptr();
+    (0..slice.len() - 1).flat_map(move |left| {
+        (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
+    })
+}
 
 ////////////////////////////////
 #[derive(Debug, Copy, Clone)]
