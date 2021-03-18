@@ -1,4 +1,5 @@
 pub mod bit_set;
+pub mod rendering;
 pub mod room;
 
 use {
@@ -16,14 +17,16 @@ pub const PLAYER_SIZE: Vec2 = Vec2 { x: 0.5, y: 0.5 };
 pub const UP_WALL_SIZE: Vec2 = Vec2 { x: 1.0, y: 0.16 };
 
 // allows an upper bound for renderer's instance buffers
-pub const PLAYER_CAP: u32 = 32;
+pub const MAX_TELEPORTERS: u32 = bit_set::INDICES as u32 / 16;
+pub const MAX_PLAYERS: u32 = 32;
+pub const MAX_WALLS: u32 = bit_set::INDICES as u32 * 2;
 /////////////////////////////////
 
 pub struct GameState {
     pub room: Room,
     pub controlling: usize,
-    pub player_instances_start: u32,
     pub players: Vec<Player>,
+    pub teleporters: HashSet<Coord>,
     pub pressing_state: PressingState,
     pub tex_id: TexId,
     pub draw_infos: [DrawInfo; 4], // four replicas of all instances to pan the maze indefinitely
@@ -42,12 +45,6 @@ pub struct PressingState {
 struct AxisPressingState {
     map: EnumMap<Sign, ElementState>,
 }
-#[derive(Debug, Clone)]
-struct Rect {
-    center: Vec2,
-    size: Vec2,
-}
-/////////////////////////////////
 
 impl Default for AxisPressingState {
     fn default() -> Self {
@@ -110,7 +107,7 @@ impl GameState {
         a_pos[idx] += correction;
         true
     }
-    fn update_player_data(&mut self) {
+    fn move_players(&mut self) {
         // 1. update my velocity
         for ori in Orientation::iter_domain() {
             self.players[self.controlling].vel[ori] = self.pressing_state.map[ori].solo_pressed();
@@ -164,38 +161,6 @@ impl GameState {
             }
         }
     }
-    pub(crate) fn update_player_transforms<B: Backend>(&mut self, renderer: &mut Renderer<B>) {
-        renderer.write_vertex_buffer(
-            self.player_instances_start,
-            self.players.iter().map(|player| {
-                Mat4::from_translation(player.pos.extend(0.))
-                    * Mat4::from_scale(PLAYER_SIZE.extend(1.))
-            }),
-        );
-    }
-    pub(crate) fn update_view_transforms(&mut self) {
-        const SCALE: f32 = 1. / 6.;
-        const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
-        let translations = {
-            const W: f32 = bit_set::W as f32;
-            const H: f32 = bit_set::H as f32;
-            let mut base = self.players[self.controlling].pos;
-            // by default, we view the TOPLEFT copy!
-            if base[0] < W * 0.5 {
-                // shift to RIGHT view
-                base[0] += W;
-            }
-            if base[1] < H * 0.5 {
-                // shift to BOTTOM view
-                base[1] += H;
-            }
-            [-base, Vec2::new(W, 0.) - base, Vec2::new(0., H) - base, Vec2::new(W, H) - base]
-        };
-        for (draw_info, translation) in self.draw_infos.iter_mut().zip(translations.iter()) {
-            draw_info.view_transform = Mat4::from_scale(SCALE_XY.extend(1.))
-                * Mat4::from_translation(translation.extend(0.))
-        }
-    }
     fn pressing_state_update(&mut self, vkc: VirtualKeyCode, state: ElementState) -> bool {
         use VirtualKeyCode as Vkc;
         let (orientation, sign) = match vkc {
@@ -216,8 +181,8 @@ impl DrivesMainLoop for GameState {
     }
 
     fn update<B: Backend>(&mut self, renderer: &mut Renderer<B>) -> Proceed {
-        self.update_player_data();
-        self.update_player_transforms(renderer);
+        self.move_players();
+        self.update_vertex_buffers(renderer);
         self.update_view_transforms();
         Ok(())
     }

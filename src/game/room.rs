@@ -14,10 +14,11 @@ use {
 // # Data types
 
 struct IncompleteRoom {
-    room: Room,
+    wall_sets: EnumMap<Orientation, BitSet>,
     visited: BitSet,
 }
 pub struct Room {
+    pub teleporters: BitSet,
     pub wall_sets: EnumMap<Orientation, BitSet>,
 }
 struct CrossesWallInfo {
@@ -65,7 +66,7 @@ impl IncompleteRoom {
             // successfully
             let cwi = dir.crosses_wall_info();
             let coord = if cwi.managed_by_src { src } else { dest };
-            self.room.wall_sets[cwi.orientation].remove(coord.into());
+            self.wall_sets[cwi.orientation].remove(coord.into());
             Some(dest)
         } else {
             None
@@ -75,16 +76,14 @@ impl IncompleteRoom {
 
 impl Room {
     pub fn wall_count(&self) -> u32 {
-        self.wall_sets[Horizontal].len() as u32 + self.wall_sets[Vertical].len() as u32
+        self.wall_sets.values().map(|bitset| bitset.len() as u32).sum()
     }
     pub fn new(rng: &mut Rng) -> Self {
         let mut incomplete_room = IncompleteRoom {
             visited: Default::default(),
-            room: Room {
-                wall_sets: enum_map::enum_map! {
-                    Horizontal => BitSet::full(),
-                    Vertical =>  BitSet::full(),
-                },
+            wall_sets: enum_map::enum_map! {
+                Horizontal => BitSet::full(),
+                Vertical =>  BitSet::full(),
             },
         };
 
@@ -104,10 +103,12 @@ impl Room {
             }
         }
         for _ in 0..(bit_set::INDICES / 4) {
-            incomplete_room.room.wall_sets[Orientation::random(rng)]
-                .remove(Coord::random(rng).into());
+            incomplete_room.wall_sets[Orientation::random(rng)].remove(Coord::random(rng).into());
         }
-        incomplete_room.room
+        Room {
+            wall_sets: incomplete_room.wall_sets,
+            teleporters: (0..bit_set::INDICES / 16).map(move |_| Coord::random(rng)).collect(),
+        }
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Orientation)> + '_ {
         let oriented_iter = move |o| self.wall_sets[o].iter().map(move |i| (i.into(), o));
