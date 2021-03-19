@@ -59,8 +59,9 @@ fn main() {
     use point::*;
     let mut pt = Point::ZERO;
     for _ in 0..10 {
-        pt[Horizontal].increment();
-        pt[Vertical].add_raw(2);
+        pt[Horizontal] += 1;
+        println!("{:?}", pt);
+        pt = -pt;
         println!("{:?}", pt);
     }
     // for i in 0..5 {

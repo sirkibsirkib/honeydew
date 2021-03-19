@@ -1,5 +1,10 @@
 use crate::basic::*;
 use core::fmt::Debug;
+use core::ops::Add;
+use core::ops::AddAssign;
+use core::ops::Neg;
+use core::ops::Sub;
+use core::ops::SubAssign;
 use core::ops::{Index, IndexMut};
 type ElementStorage = u16;
 type UserElement = ElementStorage; // same type but in range 0..(1<<USED_ELEMENT_STORAGE_MSB)
@@ -19,6 +24,65 @@ impl Debug for Element {
         (self.0 >> Self::UNUSED_LSB).fmt(f)
     }
 }
+impl Neg for Element {
+    type Output = Self;
+    fn neg(mut self) -> Self {
+        self.0 ^= 1 << (ELEMENT_STORAGE_BITS - 1);
+        self
+    }
+}
+impl<T> Add<T> for Element
+where
+    Element: From<T>,
+{
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: T) -> Self {
+        let rhs: Self = From::from(rhs);
+        Self(self.0.wrapping_add(rhs.0))
+    }
+}
+impl<T> Sub<T> for Element
+where
+    Element: From<T>,
+{
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: T) -> Self {
+        let rhs: Self = From::from(rhs);
+        Self(self.0.wrapping_sub(rhs.0))
+    }
+}
+impl<T> AddAssign<T> for Element
+where
+    Element: From<T>,
+{
+    #[inline]
+    fn add_assign(&mut self, rhs: T) {
+        *self = *self + From::from(rhs);
+    }
+}
+impl<T> SubAssign<T> for Element
+where
+    Element: From<T>,
+{
+    #[inline]
+    fn sub_assign(&mut self, rhs: T) {
+        *self = *self - From::from(rhs);
+    }
+}
+impl From<UserElement> for Element {
+    #[inline]
+    fn from(x: UserElement) -> Self {
+        Self(x << Self::UNUSED_LSB)
+    }
+}
+impl Into<UserElement> for Element {
+    #[inline]
+    fn into(self) -> UserElement {
+        self.0 >> Self::UNUSED_LSB
+    }
+}
 impl Element {
     const USED_MSB: usize = 2;
     const UNUSED_LSB: usize = ELEMENT_STORAGE_BITS - Self::USED_MSB;
@@ -35,24 +99,6 @@ impl Element {
     pub fn decrement(&mut self) {
         self.0 = self.0.wrapping_sub(Self::STORAGE_ONE);
     }
-    pub fn from_raw(user_element: UserElement) -> Self {
-        Self(user_element << Self::UNUSED_LSB)
-    }
-    pub fn into_raw(self) -> UserElement {
-        self.0 >> Self::UNUSED_LSB
-    }
-    pub fn added(self, rhs: Self) -> Self {
-        Self(self.0.wrapping_add(rhs.0))
-    }
-    pub fn add(&mut self, rhs: Self) {
-        *self = self.added(rhs);
-    }
-    pub fn added_raw(&mut self, rhs: UserElement) -> Self {
-        self.added(Self::from_raw(rhs))
-    }
-    pub fn add_raw(&mut self, rhs: UserElement) {
-        *self = self.added_raw(rhs)
-    }
 }
 
 pub fn new_orientation_enum_map_with<T>(
@@ -66,22 +112,77 @@ pub fn new_orientation_enum_map_with<T>(
 
 impl Point {
     pub const ZERO: Self = unsafe { core::mem::transmute([0 as ElementStorage; 2]) };
-    pub fn from_raw([x, y]: [UserElement; 2]) -> Self {
+    // pub fn from_raw([x, y]: [UserElement; 2]) -> Self {
+    //     Self {
+    //         map: enum_map::enum_map! {
+    //             Horizontal => Element::from_raw(x),
+    //             Vertical => Element::from_raw(y),
+    //         },
+    //     }
+    // }
+    // pub fn into_raw(self) -> [UserElement; 2] {
+    //     [self[Horizontal].into_raw(), self[Vertical].into_raw()]
+    // }
+}
+impl From<[UserElement; 2]> for Point {
+    fn from([x, y]: [UserElement; 2]) -> Self {
         Self {
             map: enum_map::enum_map! {
-                Horizontal => Element::from_raw(x),
-                Vertical => Element::from_raw(y),
+                Horizontal => Element::from(x),
+                Vertical => Element::from(y),
             },
         }
     }
-    pub fn into_raw(self) -> [UserElement; 2] {
-        [self.map[Horizontal].into_raw(), self.map[Vertical].into_raw()]
+}
+impl Into<[UserElement; 2]> for Point {
+    fn into(self) -> [UserElement; 2] {
+        [self[Horizontal].into(), self[Vertical].into()]
     }
-    pub fn added(self, rhs: Self) -> Self {
-        Self { map: new_orientation_enum_map_with(move |ori| self.map[ori].added(rhs.map[ori])) }
+}
+impl<T> Add<T> for Point
+where
+    Point: From<T>,
+{
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: T) -> Self {
+        let rhs: Self = From::from(rhs);
+        Self { map: new_orientation_enum_map_with(move |ori| self[ori] + rhs[ori]) }
     }
-    pub fn add(&mut self, rhs: Self) {
-        *self = self.added(rhs);
+}
+impl<T> AddAssign<T> for Point
+where
+    Point: From<T>,
+{
+    #[inline]
+    fn add_assign(&mut self, rhs: T) {
+        *self = *self + From::from(rhs);
+    }
+}
+impl<T> Sub<T> for Point
+where
+    Point: From<T>,
+{
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: T) -> Self {
+        let rhs: Self = From::from(rhs);
+        Self { map: new_orientation_enum_map_with(move |ori| self[ori] - rhs[ori]) }
+    }
+}
+impl<T> SubAssign<T> for Point
+where
+    Point: From<T>,
+{
+    #[inline]
+    fn sub_assign(&mut self, rhs: T) {
+        *self = *self - From::from(rhs);
+    }
+}
+impl Neg for Point {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Self { map: new_orientation_enum_map_with(move |ori| -self[ori]) }
     }
 }
 impl Index<Orientation> for Point {
