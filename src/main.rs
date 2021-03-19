@@ -2,6 +2,7 @@
 mod basic;
 mod bit_set;
 mod game;
+mod point;
 mod rng;
 
 use {
@@ -55,6 +56,13 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 }
 
 fn main() {
+    use point::*;
+    let mut pt = Point::ZERO;
+    for _ in 0..10 {
+        pt[Horizontal].increment();
+        pt[Vertical].add_raw(2);
+        println!("{:?}", pt);
+    }
     // for i in 0..5 {
     //     for j in 0..5 {
     //         let a = i as f32;
@@ -76,6 +84,6 @@ fn main() {
     //         );
     //     }
     // }
-    // return;
+    return;
     gfx_2020::main_loop::<gfx_backend_vulkan::Backend, _, _>(&render_config(), game_state_init_fn);
 }
