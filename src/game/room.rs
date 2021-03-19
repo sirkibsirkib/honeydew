@@ -3,23 +3,29 @@
 use {
     crate::{
         basic::*,
-        game::bit_set::{self, BitSet, Coord},
+        bit_set::{self, BitSet, Index},
         rng::Rng,
         Orientation,
     },
     core::ops::Neg,
 };
+pub const ROOM_DIMS: [u8; 2] = [16; 2];
 
 ///////////////////////////////////////////////
 // # Data types
 
-struct IncompleteRoom {
-    wall_sets: EnumMap<Orientation, BitSet>,
-    visited: BitSet,
-}
 pub struct Room {
     pub teleporters: BitSet,
     pub wall_sets: EnumMap<Orientation, BitSet>,
+}
+#[derive(Hash, Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Coord {
+    y: u8, // invariant: < H
+    x: u8, // invariant: < W
+}
+struct IncompleteRoom {
+    wall_sets: EnumMap<Orientation, BitSet>,
+    visited: BitSet,
 }
 struct CrossesWallInfo {
     orientation: Orientation,
@@ -107,7 +113,9 @@ impl Room {
         }
         Room {
             wall_sets: incomplete_room.wall_sets,
-            teleporters: (0..bit_set::INDICES / 16).map(move |_| Coord::random(rng)).collect(),
+            teleporters: (0..bit_set::INDICES / 16)
+                .map(move |_| Into::<Index>::into(Coord::random(rng)))
+                .collect(),
         }
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Orientation)> + '_ {
@@ -132,5 +140,80 @@ impl Room {
             }
             let _ = writeln!(stdout);
         }
+    }
+}
+
+impl Into<Coord> for Index {
+    fn into(self) -> Coord {
+        Coord { x: (self.0 % ROOM_DIMS[0] as u16) as u8, y: (self.0 / ROOM_DIMS[1] as u16) as u8 }
+    }
+}
+
+impl Coord {
+    pub fn part(self, ori: Orientation) -> u8 {
+        match ori {
+            Horizontal => self.x,
+            Vertical => self.y,
+        }
+    }
+    pub fn manhattan_distance(self, rhs: Self) -> u16 {
+        Orientation::iter_domain()
+            .map(|ori| {
+                let [a, b] = [self.part(ori), rhs.part(ori)];
+                a.wrapping_sub(b).min(b.wrapping_sub(a)) as u16
+            })
+            .sum()
+    }
+    pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
+        match dir.sign() {
+            Negative => {}
+            Positive => match dir.orientation() {
+                Horizontal => self.x = (self.x + 1) % ROOM_DIMS[0],
+                Vertical => self.y = (self.y + 1) % ROOM_DIMS[1],
+            },
+        }
+        self
+    }
+    pub fn random(rng: &mut Rng) -> Self {
+        Index::random(rng).into()
+    }
+    pub const fn new([mut x, mut y]: [u8; 2]) -> Self {
+        x %= ROOM_DIMS[0];
+        y %= ROOM_DIMS[1];
+        Self { x, y }
+    }
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        Index::iter_domain().map(Into::into)
+    }
+    pub fn iter_domain_lexicographic(
+    ) -> impl Iterator<Item = impl Iterator<Item = Self> + Clone> + Clone {
+        (0..ROOM_DIMS[1]).map(|y| (0..ROOM_DIMS[0]).map(move |x| Coord { x, y }))
+    }
+    pub const fn stepped(self, dir: Direction) -> Self {
+        let Self { x, y } = self;
+        Self::new(match dir {
+            Up => [x, y.wrapping_sub(1)],
+            Down => [x, y + 1],
+            Left => [x.wrapping_sub(1), y],
+            Right => [x + 1, y],
+        })
+    }
+    pub fn from_vec2_rounded(v: Vec2) -> Self {
+        Self::from_vec2_floored(v + Vec2::from([0.5; 2]))
+    }
+    pub fn from_vec2_floored(v: Vec2) -> Self {
+        Self::new([v.x as u8, v.y as u8])
+    }
+    pub fn into_vec2_center(self) -> Vec2 {
+        self.into_vec2_corner() + Vec2::from([0.5; 2])
+    }
+    pub fn into_vec2_corner(self) -> Vec2 {
+        Vec2::from([self.x as f32, self.y as f32])
+    }
+}
+
+impl Into<Index> for Coord {
+    fn into(self) -> Index {
+        Index(self.y as u16 * ROOM_DIMS[0] as u16 + self.x as u16)
     }
 }

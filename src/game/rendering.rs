@@ -2,7 +2,7 @@ use {
     crate::{
         basic::*,
         game::{
-            bit_set, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE,
+            room::ROOM_DIMS, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE,
             TELEPORTER_SIZE, UP_WALL_SIZE,
         },
     },
@@ -69,9 +69,9 @@ impl GameState {
         const SCALE: f32 = 1. / 6.;
         const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
         let translations = {
-            const W: f32 = bit_set::W as f32;
-            const H: f32 = bit_set::H as f32;
-            let mut base = self.players[self.controlling].pos;
+            const W: f32 = ROOM_DIMS[0] as f32;
+            const H: f32 = ROOM_DIMS[1] as f32;
+            let mut base = self.world.players[self.controlling].pos;
             // by default, we view the TOPLEFT copy!
             if base[0] < W * 0.5 {
                 // shift to RIGHT view
@@ -92,7 +92,7 @@ impl GameState {
         renderer.write_vertex_buffer(0, UNIT_QUAD.iter().copied());
     }
     fn update_wall_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        let iter = self.room.iter_walls().map(move |(coord, ori)| {
+        let iter = self.world.room.iter_walls().map(move |(coord, ori)| {
             Mat4::from_translation(GameState::wall_pos(coord, ori).extend(0.))
                 * Mat4::from_rotation_z(if let Vertical = ori { PI_F32 * -0.5 } else { 0. })
                 * Mat4::from_scale(UP_WALL_SIZE.extend(1.))
@@ -100,15 +100,14 @@ impl GameState {
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
     fn update_player_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        let iter = self.players.iter().map(move |player| {
+        let iter = self.world.players.iter().map(move |player| {
             Mat4::from_translation(player.pos.extend(0.)) * Mat4::from_scale(PLAYER_SIZE.extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_PLAYERS.start, iter);
     }
     fn update_teleporter_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        let iter = self.teleporters.iter().map(move |coord| {
-            Mat4::from_translation(coord.into_vec2_center().extend(0.))
-                * Mat4::from_scale(TELEPORTER_SIZE.extend(1.))
+        let iter = self.world.teleporters.iter().map(move |pos| {
+            Mat4::from_translation(pos.extend(0.)) * Mat4::from_scale(TELEPORTER_SIZE.extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_TELEPORTERS.start, iter);
     }
@@ -117,17 +116,17 @@ impl GameState {
         // teleporters
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_TELEPORTERS.start,
-            repeat(scissor_for_tile_at([0, 1])).take(self.teleporters.len()),
+            repeat(scissor_for_tile_at([0, 1])).take(self.world.teleporters.len()),
         );
         // players
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_PLAYERS.start,
-            repeat(scissor_for_tile_at([3, 0])).take(self.players.len()),
+            repeat(scissor_for_tile_at([3, 0])).take(self.world.players.len()),
         );
         // walls
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_WALLS.start,
-            repeat(scissor_for_tile_at([0, 0])).take(self.room.wall_count() as usize),
+            repeat(scissor_for_tile_at([0, 0])).take(self.world.room.wall_count() as usize),
         );
     }
 }

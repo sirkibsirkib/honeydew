@@ -1,12 +1,15 @@
 ////////////////////////////
 mod basic;
+mod bit_set;
 mod game;
 mod rng;
 
 use {
     crate::{
         basic::*,
-        game::{rendering::render_config, room::Room, GameState, Player, MAX_TELEPORTERS},
+        game::{
+            rendering::render_config, room::Room, GameState, Net, Player, World, MAX_TELEPORTERS,
+        },
         rng::Rng,
     },
     gfx_2020::{gfx_hal::Backend, *},
@@ -23,26 +26,30 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     room.ascii_print();
     const PLAYER_COUNT: u32 = 1;
     let controlling = 0;
-    let mut state = GameState {
-        pressing_state: Default::default(),
+    let mut world = World {
+        players: Vec::with_capacity(PLAYER_COUNT as usize),
         teleporters: Default::default(),
         room,
-        tex_id,
-        draw_infos: GameState::init_draw_infos(),
-        players: Vec::with_capacity(PLAYER_COUNT as usize),
-        controlling,
     };
     for _ in 0..PLAYER_COUNT {
-        let (_coord, pos) = state.unobstructed_center(&mut rng);
+        let pos = world.random_free_space(&mut rng);
         println!("player @ {:?}", pos);
         let player = Player { pos, vel: Default::default() };
-        state.players.push(player);
+        world.players.push(player);
     }
     for _ in 0..MAX_TELEPORTERS {
-        let (coord, _pos) = state.unobstructed_center(&mut rng);
-        println!("teleporter @ {:?}", coord);
-        state.teleporters.insert(coord);
+        let pos = world.random_free_space(&mut rng);
+        println!("teleporter @ {:?}", pos);
+        world.teleporters.push(pos);
     }
+    let state = GameState {
+        net: Net::Server { rng },
+        world,
+        pressing_state: Default::default(),
+        tex_id,
+        draw_infos: GameState::init_draw_infos(),
+        controlling,
+    };
     state.init_vertex_buffers(renderer);
     Ok(Box::leak(Box::new(state)))
 }
