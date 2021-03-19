@@ -149,14 +149,14 @@ impl Into<Coord> for Index {
 
 impl Coord {
     pub fn check_for_collisions_at(
-        wall_ori: Dim,
+        wall_dim: Dim,
         mut v: Vec2,
     ) -> impl Iterator<Item = Self> + Clone {
         let tl = {
-            v[(!wall_ori).vec_index()] += 0.5;
+            v[(!wall_dim).vec_index()] += 0.5;
             Self::from_vec2_floored(v)
         };
-        let dims = match wall_ori {
+        let dims = match wall_dim {
             X => [3, 2],
             Y => [2, 3],
         };
@@ -165,16 +165,16 @@ impl Coord {
                 .map(move |y| Self::new([(tl.x + x).wrapping_sub(1), (tl.y + y).wrapping_sub(1)]))
         })
     }
-    pub fn part(self, ori: Dim) -> u8 {
-        match ori {
+    pub fn part(self, dim: Dim) -> u8 {
+        match dim {
             X => self.x,
             Y => self.y,
         }
     }
     pub fn manhattan_distance(self, rhs: Self) -> u16 {
         Dim::iter_domain()
-            .map(|ori| {
-                let [a, b] = [self.part(ori), rhs.part(ori)];
+            .map(|dim| {
+                let [a, b] = [self.part(dim), rhs.part(dim)];
                 a.wrapping_sub(b).min(b.wrapping_sub(a)) as u16
             })
             .sum()
