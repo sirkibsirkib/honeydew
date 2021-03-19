@@ -2,7 +2,8 @@ use {
     crate::{
         basic::*,
         game::{
-            bit_set, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE, UP_WALL_SIZE,
+            bit_set, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE,
+            TELEPORTER_SIZE, UP_WALL_SIZE,
         },
     },
     gfx_2020::{
@@ -52,18 +53,6 @@ impl GameState {
         };
         [new_draw_info(), new_draw_info(), new_draw_info(), new_draw_info()]
     }
-    fn calc_wall_transforms(&self) -> impl Iterator<Item = Mat4> + '_ {
-        self.room.iter_walls().map(move |(coord, ori)| {
-            Mat4::from_translation(GameState::wall_pos(coord, ori).extend(0.))
-                * Mat4::from_rotation_z(if let Vertical = ori { PI_F32 * -0.5 } else { 0. })
-                * Mat4::from_scale(UP_WALL_SIZE.extend(1.))
-        })
-    }
-    fn calc_player_transforms(&self) -> impl Iterator<Item = Mat4> + '_ {
-        self.players.iter().map(move |player| {
-            Mat4::from_translation(player.pos.extend(0.)) * Mat4::from_scale(PLAYER_SIZE.extend(1.))
-        })
-    }
     pub fn init_vertex_buffers<B: Backend>(&self, renderer: &mut Renderer<B>) {
         // called ONCE as game starts
         Self::update_tri_verts(renderer);
@@ -74,6 +63,7 @@ impl GameState {
     pub fn update_vertex_buffers<B: Backend>(&self, renderer: &mut Renderer<B>) {
         // called once per update tick
         self.update_player_transforms(renderer);
+        self.update_teleporter_transforms(renderer);
     }
     pub fn update_view_transforms(&mut self) {
         const SCALE: f32 = 1. / 6.;
@@ -102,28 +92,42 @@ impl GameState {
         renderer.write_vertex_buffer(0, UNIT_QUAD.iter().copied());
     }
     fn update_wall_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, self.calc_wall_transforms());
+        let iter = self.room.iter_walls().map(move |(coord, ori)| {
+            Mat4::from_translation(GameState::wall_pos(coord, ori).extend(0.))
+                * Mat4::from_rotation_z(if let Vertical = ori { PI_F32 * -0.5 } else { 0. })
+                * Mat4::from_scale(UP_WALL_SIZE.extend(1.))
+        });
+        renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
     fn update_player_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        renderer.write_vertex_buffer(INSTANCE_RANGE_PLAYERS.start, self.calc_player_transforms());
+        let iter = self.players.iter().map(move |player| {
+            Mat4::from_translation(player.pos.extend(0.)) * Mat4::from_scale(PLAYER_SIZE.extend(1.))
+        });
+        renderer.write_vertex_buffer(INSTANCE_RANGE_PLAYERS.start, iter);
+    }
+    fn update_teleporter_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
+        let iter = self.teleporters.iter().map(move |coord| {
+            Mat4::from_translation(coord.into_vec2_center().extend(0.))
+                * Mat4::from_scale(TELEPORTER_SIZE.extend(1.))
+        });
+        renderer.write_vertex_buffer(INSTANCE_RANGE_TELEPORTERS.start, iter);
     }
     fn update_tex_scissors<B: Backend>(&self, renderer: &mut Renderer<B>) {
         use std::iter::repeat;
+        // teleporters
         renderer.write_vertex_buffer(
-            INSTANCE_RANGE_WALLS.start,
-            repeat(Self::wall_tex_scissor()).take(self.room.wall_count() as usize),
+            INSTANCE_RANGE_TELEPORTERS.start,
+            repeat(scissor_for_tile_at([0, 1])).take(self.teleporters.len()),
         );
+        // players
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_PLAYERS.start,
-            repeat(Self::player_tex_scissor()).take(self.players.len()),
+            repeat(scissor_for_tile_at([3, 0])).take(self.players.len()),
         );
-    }
-}
-impl GameState {
-    pub fn wall_tex_scissor() -> TexScissor {
-        scissor_for_tile_at([0, 0])
-    }
-    pub fn player_tex_scissor() -> TexScissor {
-        scissor_for_tile_at([3, 0])
+        // walls
+        renderer.write_vertex_buffer(
+            INSTANCE_RANGE_WALLS.start,
+            repeat(scissor_for_tile_at([0, 0])).take(self.room.wall_count() as usize),
+        );
     }
 }

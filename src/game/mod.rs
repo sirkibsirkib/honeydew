@@ -14,10 +14,11 @@ use {
 };
 
 pub const PLAYER_SIZE: Vec2 = Vec2 { x: 0.5, y: 0.5 };
+pub const TELEPORTER_SIZE: Vec2 = Vec2 { x: 0.3, y: 0.3 };
 pub const UP_WALL_SIZE: Vec2 = Vec2 { x: 1.0, y: 0.16 };
 
 // allows an upper bound for renderer's instance buffers
-pub const MAX_TELEPORTERS: u32 = bit_set::INDICES as u32 / 16;
+pub const MAX_TELEPORTERS: u32 = bit_set::INDICES as u32 / 64;
 pub const MAX_PLAYERS: u32 = 32;
 pub const MAX_WALLS: u32 = bit_set::INDICES as u32 * 2;
 /////////////////////////////////
@@ -61,12 +62,17 @@ impl Default for AxisPressingState {
 }
 impl GameState {
     pub fn unobstructed_center(&self, rng: &mut Rng) -> (Coord, Vec2) {
+        const MIN_DIST: u16 = 2;
         loop {
             let coord = Coord::random(rng);
-            let center = coord.into_vec2_center();
-            const MIN_DIST: f32 = 2.;
-            if self.players.iter().all(|p| p.pos.distance_squared(center) < MIN_DIST * MIN_DIST) {
-                return (coord, center);
+            if self.teleporters.iter().all(|t| MIN_DIST <= t.manhattan_distance(coord)) {
+                let center = coord.into_vec2_center();
+
+                const MIN_DIST_F32: f32 = MIN_DIST as f32;
+                const MIN_DIST_F32_SQR: f32 = MIN_DIST_F32 * MIN_DIST_F32;
+                if self.players.iter().all(|p| MIN_DIST_F32_SQR <= p.pos.distance_squared(center)) {
+                    return (coord, center);
+                }
             }
         }
     }

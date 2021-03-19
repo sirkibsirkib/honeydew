@@ -6,7 +6,7 @@ mod rng;
 use {
     crate::{
         basic::*,
-        game::{bit_set::Coord, rendering::render_config, room::Room, GameState, Player},
+        game::{rendering::render_config, room::Room, GameState, Player, MAX_TELEPORTERS},
         rng::Rng,
     },
     gfx_2020::{gfx_hal::Backend, *},
@@ -34,9 +34,14 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     };
     for _ in 0..PLAYER_COUNT {
         let (_coord, pos) = state.unobstructed_center(&mut rng);
-        println!("{:?}", pos);
+        println!("player @ {:?}", pos);
         let player = Player { pos, vel: Default::default() };
         state.players.push(player);
+    }
+    for _ in 0..MAX_TELEPORTERS {
+        let (coord, _pos) = state.unobstructed_center(&mut rng);
+        println!("teleporter @ {:?}", coord);
+        state.teleporters.insert(coord);
     }
     state.init_vertex_buffers(renderer);
     Ok(Box::leak(Box::new(state)))

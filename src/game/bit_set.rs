@@ -10,7 +10,7 @@ pub const INDICES: u16 = W as u16 * H as u16;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Index(u16 /* invariant: < INDICES */);
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Hash, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
     y: u8, // invariant: < H
     x: u8, // invariant: < W
@@ -182,6 +182,14 @@ impl Coord {
             Horizontal => self.x,
             Vertical => self.y,
         }
+    }
+    pub fn manhattan_distance(self, rhs: Self) -> u16 {
+        Orientation::iter_domain()
+            .map(|ori| {
+                let [a, b] = [self.part(ori), rhs.part(ori)];
+                a.wrapping_sub(b).min(b.wrapping_sub(a)) as u16
+            })
+            .sum()
     }
     pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
         match dir.sign() {
