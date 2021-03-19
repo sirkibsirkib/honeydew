@@ -5,7 +5,7 @@ use {
         basic::*,
         bit_set::{self, BitSet, Index},
         rng::Rng,
-        Orientation,
+        Dim,
     },
     core::ops::Neg,
 };
@@ -16,7 +16,7 @@ pub const ROOM_DIMS: [u8; 2] = [8; 2];
 
 pub struct Room {
     pub teleporters: BitSet,
-    pub wall_sets: EnumMap<Orientation, BitSet>,
+    pub wall_sets: EnumMap<Dim, BitSet>,
 }
 #[derive(Hash, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
@@ -24,18 +24,18 @@ pub struct Coord {
     y: u8, // invariant: < H
 }
 struct IncompleteRoom {
-    wall_sets: EnumMap<Orientation, BitSet>,
+    wall_sets: EnumMap<Dim, BitSet>,
     visited: BitSet,
 }
 struct CrossesWallInfo {
-    orientation: Orientation,
+    dim: Dim,
     managed_by_src: bool,
 }
 
 impl Direction {
     fn crosses_wall_info(self) -> CrossesWallInfo {
         CrossesWallInfo {
-            orientation: !self.orientation(),
+            dim: !self.dim(),
             managed_by_src: match self {
                 Down | Right => false,
                 Up | Left => true,
@@ -72,7 +72,7 @@ impl IncompleteRoom {
             // successfully
             let cwi = dir.crosses_wall_info();
             let coord = if cwi.managed_by_src { src } else { dest };
-            self.wall_sets[cwi.orientation].remove(coord.into());
+            self.wall_sets[cwi.dim].remove(coord.into());
             Some(dest)
         } else {
             None
@@ -88,8 +88,8 @@ impl Room {
         let mut incomplete_room = IncompleteRoom {
             visited: Default::default(),
             wall_sets: enum_map::enum_map! {
-                Horizontal => BitSet::full(),
-                Vertical =>  BitSet::full(),
+                X => BitSet::full(),
+                Y =>  BitSet::full(),
             },
         };
 
@@ -109,7 +109,7 @@ impl Room {
             }
         }
         for _ in 0..(bit_set::INDICES / 4) {
-            incomplete_room.wall_sets[Orientation::random(rng)].remove(Coord::random(rng).into());
+            incomplete_room.wall_sets[Dim::random(rng)].remove(Coord::random(rng).into());
         }
         Room {
             wall_sets: incomplete_room.wall_sets,
@@ -118,9 +118,9 @@ impl Room {
                 .collect(),
         }
     }
-    pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Orientation)> + '_ {
-        let oriented_iter = move |o| self.wall_sets[o].iter().map(move |i| (i.into(), o));
-        oriented_iter(Horizontal).chain(oriented_iter(Vertical))
+    pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Dim)> + '_ {
+        let dimmed_iter = move |o| self.wall_sets[o].iter().map(move |i| (i.into(), o));
+        dimmed_iter(X).chain(dimmed_iter(Y))
     }
     pub fn ascii_print(&self) {
         let stdout = std::io::stdout();
@@ -128,14 +128,12 @@ impl Room {
         use std::io::Write;
         for row_iter in Coord::iter_domain_lexicographic() {
             for coord in row_iter.clone() {
-                let up_char =
-                    if self.wall_sets[Horizontal].contains(coord.into()) { '-' } else { ' ' };
+                let up_char = if self.wall_sets[X].contains(coord.into()) { '-' } else { ' ' };
                 let _ = write!(stdout, "·{}{}", up_char, up_char);
             }
             let _ = writeln!(stdout);
             for coord in row_iter {
-                let left_char =
-                    if self.wall_sets[Vertical].contains(coord.into()) { '|' } else { ' ' };
+                let left_char = if self.wall_sets[Y].contains(coord.into()) { '|' } else { ' ' };
                 let _ = write!(stdout, "{}  ", left_char);
             }
             let _ = writeln!(stdout);
@@ -151,7 +149,7 @@ impl Into<Coord> for Index {
 
 impl Coord {
     pub fn check_for_collisions_at(
-        wall_ori: Orientation,
+        wall_ori: Dim,
         mut v: Vec2,
     ) -> impl Iterator<Item = Self> + Clone {
         let tl = {
@@ -159,22 +157,22 @@ impl Coord {
             Self::from_vec2_floored(v)
         };
         let dims = match wall_ori {
-            Horizontal => [3, 2],
-            Vertical => [2, 3],
+            X => [3, 2],
+            Y => [2, 3],
         };
         (0..dims[0]).flat_map(move |x| {
             (0..dims[1])
                 .map(move |y| Self::new([(tl.x + x).wrapping_sub(1), (tl.y + y).wrapping_sub(1)]))
         })
     }
-    pub fn part(self, ori: Orientation) -> u8 {
+    pub fn part(self, ori: Dim) -> u8 {
         match ori {
-            Horizontal => self.x,
-            Vertical => self.y,
+            X => self.x,
+            Y => self.y,
         }
     }
     pub fn manhattan_distance(self, rhs: Self) -> u16 {
-        Orientation::iter_domain()
+        Dim::iter_domain()
             .map(|ori| {
                 let [a, b] = [self.part(ori), rhs.part(ori)];
                 a.wrapping_sub(b).min(b.wrapping_sub(a)) as u16
@@ -184,9 +182,9 @@ impl Coord {
     pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
         match dir.sign() {
             Negative => {}
-            Positive => match dir.orientation() {
-                Horizontal => self.x = (self.x + 1) % ROOM_DIMS[0],
-                Vertical => self.y = (self.y + 1) % ROOM_DIMS[1],
+            Positive => match dir.dim() {
+                X => self.x = (self.x + 1) % ROOM_DIMS[0],
+                Y => self.y = (self.y + 1) % ROOM_DIMS[1],
             },
         }
         self

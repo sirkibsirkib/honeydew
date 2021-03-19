@@ -102,7 +102,7 @@ impl GameState {
     fn update_wall_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.room.iter_walls().map(move |(coord, ori)| {
             Mat4::from_translation(GameState::wall_pos(coord, ori).extend(0.))
-                * Mat4::from_rotation_z(if let Vertical = ori { PI_F32 * -0.5 } else { 0. })
+                * Mat4::from_rotation_z(if let Y = ori { PI_F32 * -0.5 } else { 0. })
                 * Mat4::from_scale(UP_WALL_SIZE.extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);

@@ -8,8 +8,8 @@ pub use {
     gfx_2020::{glam::Vec2Swizzles, Mat4, Vec2, Vec3},
     ordered_float::OrderedFloat,
     std::collections::HashSet,
+    Dim::*,
     Direction::*,
-    Orientation::*,
     Sign::*,
 };
 
@@ -50,9 +50,9 @@ pub enum Direction {
 }
 
 #[derive(Copy, Clone, Debug, enum_map::Enum)]
-pub enum Orientation {
-    Horizontal,
-    Vertical,
+pub enum Dim {
+    X,
+    Y,
 }
 
 #[derive(Copy, Clone, Debug, enum_map::Enum)]
@@ -76,51 +76,51 @@ impl Mul<f32> for Sign {
         }
     }
 }
-impl Not for Orientation {
+impl Not for Dim {
     type Output = Self;
     fn not(self) -> <Self as Not>::Output {
         match self {
-            Vertical => Horizontal,
-            Horizontal => Vertical,
+            Y => X,
+            X => Y,
         }
     }
 }
 
-impl Orientation {
+impl Dim {
     pub fn sign(self, sign: Sign) -> Direction {
         Direction::new(self, sign)
     }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
-        [Horizontal, Vertical].iter().copied()
+        [X, Y].iter().copied()
     }
     pub fn random(rng: &mut Rng) -> Self {
         if rng.gen_bool() {
-            Horizontal
+            X
         } else {
-            Vertical
+            Y
         }
     }
     pub const fn vec_index(self) -> usize {
         match self {
-            Horizontal => 0,
-            Vertical => 1,
+            X => 0,
+            Y => 1,
         }
     }
 }
 
 impl Direction {
-    pub const fn new(ori: Orientation, sign: Sign) -> Self {
-        match (ori, sign) {
-            (Horizontal, Negative) => Left,
-            (Horizontal, Positive) => Right,
-            (Vertical, Negative) => Up,
-            (Vertical, Positive) => Down,
+    pub const fn new(dim: Dim, sign: Sign) -> Self {
+        match (dim, sign) {
+            (X, Negative) => Left,
+            (X, Positive) => Right,
+            (Y, Negative) => Up,
+            (Y, Positive) => Down,
         }
     }
-    pub const fn orientation(self) -> Orientation {
+    pub const fn dim(self) -> Dim {
         match self {
-            Up | Down => Orientation::Vertical,
-            Left | Right => Orientation::Horizontal,
+            Up | Down => Y,
+            Left | Right => X,
         }
     }
     pub const fn sign(self) -> Sign {

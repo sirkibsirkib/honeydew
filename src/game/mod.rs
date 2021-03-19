@@ -44,11 +44,11 @@ pub struct World {
 #[derive(Debug)]
 pub struct Player {
     pub pos: Vec2,
-    pub vel: EnumMap<Orientation, Option<Sign>>,
+    pub vel: EnumMap<Dim, Option<Sign>>,
 }
 #[derive(Default, Debug)]
 pub struct PressingState {
-    map: EnumMap<Orientation, AxisPressingState>,
+    map: EnumMap<Dim, AxisPressingState>,
 }
 #[derive(Copy, Clone, Debug)]
 struct AxisPressingState {
@@ -68,7 +68,7 @@ impl Default for AxisPressingState {
 impl Rect {
     fn contains(&self, pt: Vec2) -> bool {
         const GRACE_DISTANCE: f32 = 0.001;
-        Orientation::iter_domain().map(Orientation::vec_index).all(|idx| {
+        Dim::iter_domain().map(Dim::vec_index).all(|idx| {
             let pair = [pt[idx], self.center[idx]];
             modulo_distance(pair, ROOM_DIMS[idx] as f32) < self.size[idx] - GRACE_DISTANCE
         })
@@ -77,9 +77,9 @@ impl Rect {
         if !self.contains(*pt) {
             return false;
         }
-        let (idx, correction) = Orientation::iter_domain()
-            .map(|ori| {
-                let idx = ori.vec_index();
+        let (idx, correction) = Dim::iter_domain()
+            .map(|dim| {
+                let idx = dim.vec_index();
                 let correct_up = modulo_difference(
                     [self.center[idx] - self.size[idx], pt[idx]],
                     ROOM_DIMS[idx] as f32,
@@ -114,9 +114,9 @@ impl World {
         // update player positions wrt. movement
         for player in &mut self.players {
             // println!("{:?}", player.pos);
-            for ori in Orientation::iter_domain() {
-                if let Some(sign) = player.vel[ori] {
-                    player.pos[ori.vec_index()] += sign * 0.05;
+            for dim in Dim::iter_domain() {
+                if let Some(sign) = player.vel[dim] {
+                    player.pos[dim.vec_index()] += sign * 0.05;
                 }
             }
         }
@@ -150,13 +150,13 @@ impl World {
             println!("at {:?}", player.pos);
 
             // correct position wrt. player<->wall collisions
-            for ori in Orientation::iter_domain() {
-                let four_around = Coord::check_for_collisions_at(ori, player.pos);
+            for dim in Dim::iter_domain() {
+                let four_around = Coord::check_for_collisions_at(dim, player.pos);
                 for (i, check_at) in four_around.enumerate() {
-                    let collided = if self.room.wall_sets[ori].contains(check_at.into()) {
+                    let collided = if self.room.wall_sets[dim].contains(check_at.into()) {
                         let rect = Rect {
-                            center: GameState::wall_pos(check_at, ori),
-                            size: GameState::wall_min_dists(ori),
+                            center: GameState::wall_pos(check_at, dim),
+                            size: GameState::wall_min_dists(dim),
                         };
                         let collided = rect.correct_point_collider(&mut player.pos);
                         if collided {
@@ -172,10 +172,10 @@ impl World {
 
                     let mut size = Vec2::from([0.2; 2]);
                     if collided {
-                        size[ori.vec_index()] = 0.6;
+                        size[dim.vec_index()] = 0.6;
                     }
                     renderer.write_vertex_buffer(
-                        1 + i as u32 + if let Horizontal = ori { 4 } else { 0 },
+                        1 + i as u32 + if let X = dim { 4 } else { 0 },
                         Some(
                             Mat4::from_translation(check_at.into_vec2_center().extend(0.))
                                 * Mat4::from_scale(size.extend(1.)),
@@ -189,7 +189,7 @@ impl World {
 impl GameState {
     pub fn wrap_pos(pos: &mut Vec2) {
         const BOUND: Vec2 = Vec2 { x: ROOM_DIMS[0] as f32, y: ROOM_DIMS[1] as f32 };
-        for idx in Orientation::iter_domain().map(Orientation::vec_index) {
+        for idx in Dim::iter_domain().map(Dim::vec_index) {
             let value = &mut pos[idx];
             let bound = BOUND[idx];
             if *value < 0. {
@@ -199,25 +199,25 @@ impl GameState {
             }
         }
     }
-    fn wall_min_dists(ori: Orientation) -> Vec2 {
-        (Self::wall_size(ori) + PLAYER_SIZE) * 0.5
+    fn wall_min_dists(dim: Dim) -> Vec2 {
+        (Self::wall_size(dim) + PLAYER_SIZE) * 0.5
     }
-    pub fn wall_size(ori: Orientation) -> Vec2 {
-        match ori {
-            Horizontal => UP_WALL_SIZE,
-            Vertical => UP_WALL_SIZE.yx(),
+    pub fn wall_size(dim: Dim) -> Vec2 {
+        match dim {
+            X => UP_WALL_SIZE,
+            Y => UP_WALL_SIZE.yx(),
         }
     }
-    pub fn wall_pos(coord: Coord, ori: Orientation) -> Vec2 {
-        // e.g. Horizontal wall at Coord[0,0] has pos [0.5, 0.0]
+    pub fn wall_pos(coord: Coord, dim: Dim) -> Vec2 {
+        // e.g. Hdimzontal wall at Coord[0,0] has pos [0.5, 0.0]
         let mut pos = coord.into_vec2_corner();
-        pos[ori.vec_index()] += 0.5;
+        pos[dim.vec_index()] += 0.5;
         pos
     }
     fn update_move_key(&mut self, dir: Direction, state: ElementState) {
-        let ori = dir.orientation();
-        self.pressing_state.map[ori].map[dir.sign()] = state;
-        self.world.players[self.controlling].vel[ori] = self.pressing_state.map[ori].solo_pressed();
+        let dim = dir.dim();
+        self.pressing_state.map[dim].map[dir.sign()] = state;
+        self.world.players[self.controlling].vel[dim] = self.pressing_state.map[dim].solo_pressed();
     }
 }
 

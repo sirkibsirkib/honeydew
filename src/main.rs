@@ -56,14 +56,14 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 }
 
 fn main() {
-    use point::*;
-    let mut pt = Point::ZERO;
-    for _ in 0..10 {
-        pt[Horizontal] += 1;
-        println!("{:?}", pt);
-        pt = -pt;
-        println!("{:?}", pt);
-    }
+    // use point::*;
+    // let mut pt = Point::ZERO;
+    // for _ in 0..10 {
+    //     pt[X] += 1;
+    //     println!("{:?}", pt);
+    //     pt = -pt;
+    //     println!("{:?}", pt);
+    // }
     // for i in 0..5 {
     //     for j in 0..5 {
     //         let a = i as f32;
@@ -85,6 +85,6 @@ fn main() {
     //         );
     //     }
     // }
-    return;
+    // return;
     gfx_2020::main_loop::<gfx_backend_vulkan::Backend, _, _>(&render_config(), game_state_init_fn);
 }

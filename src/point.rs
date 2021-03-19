@@ -16,7 +16,7 @@ pub struct Element(ElementStorage);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Point {
-    map: EnumMap<Orientation, Element>,
+    map: EnumMap<Dim, Element>,
 }
 
 impl Debug for Element {
@@ -101,12 +101,10 @@ impl Element {
     }
 }
 
-pub fn new_orientation_enum_map_with<T>(
-    mut func: impl FnMut(Orientation) -> T,
-) -> EnumMap<Orientation, T> {
+pub fn new_dimentation_enum_map_with<T>(mut func: impl FnMut(Dim) -> T) -> EnumMap<Dim, T> {
     enum_map::enum_map! {
-        Horizontal => func(Horizontal),
-        Vertical => func(Vertical),
+        X => func(X),
+        Y => func(Y),
     }
 }
 
@@ -115,28 +113,28 @@ impl Point {
     // pub fn from_raw([x, y]: [UserElement; 2]) -> Self {
     //     Self {
     //         map: enum_map::enum_map! {
-    //             Horizontal => Element::from_raw(x),
-    //             Vertical => Element::from_raw(y),
+    //             X => Element::from_raw(x),
+    //             Y => Element::from_raw(y),
     //         },
     //     }
     // }
     // pub fn into_raw(self) -> [UserElement; 2] {
-    //     [self[Horizontal].into_raw(), self[Vertical].into_raw()]
+    //     [self[X].into_raw(), self[Y].into_raw()]
     // }
 }
 impl From<[UserElement; 2]> for Point {
     fn from([x, y]: [UserElement; 2]) -> Self {
         Self {
             map: enum_map::enum_map! {
-                Horizontal => Element::from(x),
-                Vertical => Element::from(y),
+                X => Element::from(x),
+                Y => Element::from(y),
             },
         }
     }
 }
 impl Into<[UserElement; 2]> for Point {
     fn into(self) -> [UserElement; 2] {
-        [self[Horizontal].into(), self[Vertical].into()]
+        [self[X].into(), self[Y].into()]
     }
 }
 impl<T> Add<T> for Point
@@ -147,7 +145,7 @@ where
     #[inline]
     fn add(self, rhs: T) -> Self {
         let rhs: Self = From::from(rhs);
-        Self { map: new_orientation_enum_map_with(move |ori| self[ori] + rhs[ori]) }
+        Self { map: new_dimentation_enum_map_with(move |dim| self[dim] + rhs[dim]) }
     }
 }
 impl<T> AddAssign<T> for Point
@@ -167,7 +165,7 @@ where
     #[inline]
     fn sub(self, rhs: T) -> Self {
         let rhs: Self = From::from(rhs);
-        Self { map: new_orientation_enum_map_with(move |ori| self[ori] - rhs[ori]) }
+        Self { map: new_dimentation_enum_map_with(move |dim| self[dim] - rhs[dim]) }
     }
 }
 impl<T> SubAssign<T> for Point
@@ -182,21 +180,21 @@ where
 impl Neg for Point {
     type Output = Self;
     fn neg(self) -> Self {
-        Self { map: new_orientation_enum_map_with(move |ori| -self[ori]) }
+        Self { map: new_dimentation_enum_map_with(move |dim| -self[dim]) }
     }
 }
-impl Index<Orientation> for Point {
+impl Index<Dim> for Point {
     type Output = Element;
 
     #[inline]
-    fn index(&self, ori: Orientation) -> &Element {
-        &self.map[ori]
+    fn index(&self, dim: Dim) -> &Element {
+        &self.map[dim]
     }
 }
 
-impl IndexMut<Orientation> for Point {
+impl IndexMut<Dim> for Point {
     #[inline]
-    fn index_mut(&mut self, ori: Orientation) -> &mut Element {
-        &mut self.map[ori]
+    fn index_mut(&mut self, dim: Dim) -> &mut Element {
+        &mut self.map[dim]
     }
 }
