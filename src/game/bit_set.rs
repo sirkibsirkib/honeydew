@@ -177,6 +177,12 @@ impl Iterator for BitSetIter<'_> {
 }
 
 impl Coord {
+    pub fn part(self, ori: Orientation) -> u8 {
+        match ori {
+            Horizontal => self.x,
+            Vertical => self.y,
+        }
+    }
     pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
         match dir.sign() {
             Negative => {}
@@ -189,9 +195,6 @@ impl Coord {
     }
     pub fn random(rng: &mut Rng) -> Self {
         Index::random(rng).into()
-    }
-    pub const fn xy(self) -> [u8; 2] {
-        [self.x, self.y]
     }
     pub const fn new([mut x, mut y]: [u8; 2]) -> Self {
         x %= W;
@@ -214,21 +217,22 @@ impl Coord {
             Right => [x + 1, y],
         })
     }
+    pub fn from_vec2_rounded(v: Vec2) -> Self {
+        Self::from_vec2_floored(v + Vec2::from([0.5; 2]))
+    }
+    pub fn from_vec2_floored(v: Vec2) -> Self {
+        Self::new([v.x as u8, v.y as u8])
+    }
+    pub fn into_vec2_center(self) -> Vec2 {
+        self.into_vec2_corner() + Vec2::from([0.5; 2])
+    }
+    pub fn into_vec2_corner(self) -> Vec2 {
+        Vec2::from([self.x as f32, self.y as f32])
+    }
 }
 
 impl Into<Index> for Coord {
     fn into(self) -> Index {
         Index(self.y as u16 * W as u16 + self.x as u16)
-    }
-}
-
-impl Into<Vec2> for Coord {
-    fn into(self) -> Vec2 {
-        Vec2::new(self.x as f32, self.y as f32)
-    }
-}
-impl Into<Coord> for Vec2 {
-    fn into(self) -> Coord {
-        Coord::new([self.x as u8, self.y as u8])
     }
 }

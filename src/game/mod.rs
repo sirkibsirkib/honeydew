@@ -3,7 +3,7 @@ pub mod rendering;
 pub mod room;
 
 use {
-    crate::basic::*,
+    crate::{basic::*, rng::Rng},
     bit_set::Coord,
     gfx_2020::{
         gfx_hal::Backend,
@@ -23,11 +23,14 @@ pub const MAX_WALLS: u32 = bit_set::INDICES as u32 * 2;
 /////////////////////////////////
 
 pub struct GameState {
+    // game world
     pub room: Room,
-    pub controlling: usize,
     pub players: Vec<Player>,
     pub teleporters: HashSet<Coord>,
+    // controlling
+    pub controlling: usize,
     pub pressing_state: PressingState,
+    // rendering
     pub tex_id: TexId,
     pub draw_infos: [DrawInfo; 4], // four replicas of all instances to pan the maze indefinitely
 }
@@ -57,6 +60,16 @@ impl Default for AxisPressingState {
     }
 }
 impl GameState {
+    pub fn unobstructed_center(&self, rng: &mut Rng) -> (Coord, Vec2) {
+        loop {
+            let coord = Coord::random(rng);
+            let center = coord.into_vec2_center();
+            const MIN_DIST: f32 = 2.;
+            if self.players.iter().all(|p| p.pos.distance_squared(center) < MIN_DIST * MIN_DIST) {
+                return (coord, center);
+            }
+        }
+    }
     pub fn wrap_pos(pos: &mut Vec2) {
         const BOUND: Vec2 = Vec2 { x: bit_set::W as f32, y: bit_set::H as f32 };
         for idx in Orientation::iter_domain().map(Orientation::vec_index) {
@@ -80,7 +93,7 @@ impl GameState {
     }
     pub fn wall_pos(coord: Coord, ori: Orientation) -> Vec2 {
         // e.g. Horizontal wall at Coord[0,0] has pos [0.5, 0.0]
-        let mut pos: Vec2 = coord.into();
+        let mut pos = coord.into_vec2_corner();
         pos[ori.vec_index()] += 0.5;
         pos
     }
@@ -142,7 +155,7 @@ impl GameState {
                 }
             }
             // correct position wrt. player<->wall collisions
-            let at: Coord = (player.pos + Vec2::from([0.5; 2])).into();
+            let at = Coord::from_vec2_rounded(player.pos);
             for ori in Orientation::iter_domain() {
                 // Eg: check for horizontal walls in THIS cell, cell to the left, and cell to the right
                 let check_at = [at.stepped(ori.sign(Negative)), at, at.stepped(ori.sign(Positive))];
