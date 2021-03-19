@@ -9,7 +9,7 @@ use {
     gfx_2020::{
         gfx_hal::{pso::Face, window::Extent2D, Backend},
         vert_coord_consts::UNIT_QUAD,
-        DrawInfo, MaxBufferArgs, Renderer, RendererConfig, RendererInitConfig, TexScissor,
+        DrawInfo, MaxBufferArgs, Renderer, RendererConfig, RendererInitConfig, TexId, TexScissor,
     },
 };
 pub const INSTANCE_RANGE_PLAYERS: Range<u32> = 0..MAX_PLAYERS;
@@ -17,6 +17,8 @@ pub const INSTANCE_RANGE_TELEPORTERS: Range<u32> =
     range_concat(INSTANCE_RANGE_PLAYERS, MAX_TELEPORTERS);
 pub const INSTANCE_RANGE_WALLS: Range<u32> = range_concat(INSTANCE_RANGE_TELEPORTERS, MAX_WALLS);
 pub const MAX_INSTANCES: u32 = INSTANCE_RANGE_WALLS.end;
+
+pub const WRAP_DRAW: bool = true;
 
 /////////////////////////////////
 pub fn render_config() -> RendererConfig<'static> {
@@ -45,6 +47,10 @@ fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
     }
 }
 impl GameState {
+    pub fn get_draw_args(&self) -> (TexId, &[DrawInfo]) {
+        let range = 0..if WRAP_DRAW { 4 } else { 1 };
+        (self.tex_id, &self.draw_infos[range])
+    }
     pub fn init_draw_infos() -> [DrawInfo; 4] {
         let new_draw_info = || DrawInfo {
             instance_range: 0..MAX_INSTANCES,
@@ -66,20 +72,22 @@ impl GameState {
         self.update_teleporter_transforms(renderer);
     }
     pub fn update_view_transforms(&mut self) {
-        const SCALE: f32 = 1. / 6.;
+        const SCALE: f32 = 1. / 16.;
         const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
         let translations = {
             const W: f32 = ROOM_DIMS[0] as f32;
             const H: f32 = ROOM_DIMS[1] as f32;
             let mut base = self.world.players[self.controlling].pos;
             // by default, we view the TOPLEFT copy!
-            if base[0] < W * 0.5 {
-                // shift to RIGHT view
-                base[0] += W;
-            }
-            if base[1] < H * 0.5 {
-                // shift to BOTTOM view
-                base[1] += H;
+            if WRAP_DRAW {
+                if base[0] < W * 0.5 {
+                    // shift to RIGHT view
+                    base[0] += W;
+                }
+                if base[1] < H * 0.5 {
+                    // shift to BOTTOM view
+                    base[1] += H;
+                }
             }
             [-base, Vec2::new(W, 0.) - base, Vec2::new(0., H) - base, Vec2::new(W, H) - base]
         };

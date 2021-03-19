@@ -9,7 +9,7 @@ use {
     },
     core::ops::Neg,
 };
-pub const ROOM_DIMS: [u8; 2] = [16; 2];
+pub const ROOM_DIMS: [u8; 2] = [8; 2];
 
 ///////////////////////////////////////////////
 // # Data types
@@ -20,8 +20,8 @@ pub struct Room {
 }
 #[derive(Hash, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
-    y: u8, // invariant: < H
     x: u8, // invariant: < W
+    y: u8, // invariant: < H
 }
 struct IncompleteRoom {
     wall_sets: EnumMap<Orientation, BitSet>,
@@ -150,6 +150,14 @@ impl Into<Coord> for Index {
 }
 
 impl Coord {
+    pub fn check_for_collisions_at(
+        ori: Orientation,
+        v: Vec2,
+    ) -> impl Iterator<Item = Self> + Clone {
+        let tl = Self::from_vec2_floored(v + Vec2::from([-0.5, -1.0]));
+        let dims = [2, 3];
+        (0..dims[0]).flat_map(move |x| (0..dims[1]).map(move |y| Self::new([tl.x + x, tl.y + y])))
+    }
     pub fn part(self, ori: Orientation) -> u8 {
         match ori {
             Horizontal => self.x,

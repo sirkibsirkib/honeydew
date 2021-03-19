@@ -21,7 +21,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 ) -> ProceedWith<&'static mut GameState> {
     let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
     let tex_id = renderer.load_texture(&texture);
-    let mut rng = Rng::new(Some(0));
+    let mut rng = Rng::new(Some(1));
     let room = Room::new(&mut rng);
     room.ascii_print();
     const PLAYER_COUNT: u32 = 1;
@@ -55,5 +55,27 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 }
 
 fn main() {
+    // for i in 0..5 {
+    //     for j in 0..5 {
+    //         let a = i as f32;
+    //         let b = j as f32;
+    //         let ans = modulo_difference([a, b], 5.);
+    //         println!(
+    //             "{:?}\t({} + {}) % 5. == {}\t{}",
+    //             [a, b],
+    //             b,
+    //             ans,
+    //             a,
+    //             if ans.is_nan() {
+    //                 "NAN"
+    //             } else if (b + ans) % 5. == a {
+    //                 "YES"
+    //             } else {
+    //                 "NO"
+    //             }
+    //         );
+    //     }
+    // }
+    // return;
     gfx_2020::main_loop::<gfx_backend_vulkan::Backend, _, _>(&render_config(), game_state_init_fn);
 }

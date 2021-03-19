@@ -25,7 +25,21 @@ pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
         (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
     })
 }
-
+pub fn modulo_difference([a, b]: [f32; 2], modulus: f32) -> f32 {
+    // assume positive modulus
+    // assume {a, b} in 0..modulus
+    let wraps = (a - b).abs() > modulus / 2.;
+    if wraps {
+        (a + modulus) - b
+    } else {
+        a - b
+    }
+}
+pub fn modulo_distance([a, b]: [f32; 2], modulus: f32) -> f32 {
+    // assumes inputs are in range 0..modulus
+    let direct_dist = (a - b).abs();
+    (modulus - direct_dist).min(direct_dist)
+}
 ////////////////////////////////
 #[derive(Debug, Copy, Clone)]
 pub enum Direction {

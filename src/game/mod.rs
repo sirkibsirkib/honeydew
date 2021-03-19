@@ -68,9 +68,10 @@ impl Default for AxisPressingState {
 impl Rect {
     fn contains(&self, pt: Vec2) -> bool {
         const GRACE_DISTANCE: f32 = 0.001;
-        Orientation::iter_domain()
-            .map(Orientation::vec_index)
-            .all(|idx| (pt[idx] - self.center[idx]).abs() < self.size[idx] - GRACE_DISTANCE)
+        Orientation::iter_domain().map(Orientation::vec_index).all(|idx| {
+            let pair = [pt[idx], self.center[idx]];
+            modulo_distance(pair, ROOM_DIMS[idx] as f32) < self.size[idx] - GRACE_DISTANCE
+        })
     }
     fn correct_point_collider(&self, pt: &mut Vec2) -> bool {
         if !self.contains(*pt) {
@@ -79,15 +80,16 @@ impl Rect {
         let (idx, correction) = Orientation::iter_domain()
             .map(|ori| {
                 let idx = ori.vec_index();
-                let a_rel = pt[idx] - self.center[idx];
+                let clock_distance =
+                    modulo_difference([pt[idx], self.center[idx]], ROOM_DIMS[idx] as f32);
                 let min_dist = self.size[idx];
-                let a_corrected = if 0. < a_rel { min_dist } else { -min_dist };
-                let correction = a_corrected - a_rel;
+                let a_corrected = if 0. < clock_distance { min_dist } else { -min_dist };
+                let correction = a_corrected - clock_distance;
                 (idx, correction)
             })
             .min_by_key(|(_, correction)| OrderedFloat(correction.abs()))
             .unwrap();
-        pt[idx] += correction;
+        pt[idx] = (pt[idx] + correction) % ROOM_DIMS[idx] as f32;
         true
     }
 }
@@ -103,7 +105,7 @@ impl World {
             }
         }
     }
-    fn move_and_collide(&mut self, net: &mut Net) {
+    fn move_and_collide<B: Backend>(&mut self, net: &mut Net, renderer: &mut Renderer<B>) {
         // update player positions wrt. movement
         for player in &mut self.players {
             // println!("{:?}", player.pos);
@@ -137,25 +139,43 @@ impl World {
         }
 
         for player in &mut self.players {
+            // 'correct_loop: loop {
             // wrap player positions
             GameState::wrap_pos(&mut player.pos);
+            println!("at {:?}", player.pos);
 
             // correct position wrt. player<->wall collisions
-            let at = Coord::from_vec2_rounded(player.pos);
             for ori in Orientation::iter_domain() {
-                // Eg: check for horizontal walls in THIS cell, cell to the left, and cell to the right
-                let check_at = [at.stepped(ori.sign(Negative)), at, at.stepped(ori.sign(Positive))];
-                for &coord in check_at.iter() {
-                    if self.room.wall_sets[ori].contains(coord.into()) {
+                let four_around = Coord::check_for_collisions_at(ori, player.pos);
+                for (i, check_at) in four_around.enumerate() {
+                    let collided = if self.room.wall_sets[ori].contains(check_at.into()) {
                         let rect = Rect {
-                            center: GameState::wall_pos(coord, ori),
+                            center: GameState::wall_pos(check_at, ori),
                             size: GameState::wall_min_dists(ori),
                         };
                         let collided = rect.correct_point_collider(&mut player.pos);
                         if collided {
-                            GameState::wrap_pos(&mut player.pos);
+                            println!("COLLIDED");
                         }
+                        true
+                        // if collided {
+                        //     continue 'correct_loop;
+                        // }
+                    } else {
+                        false
+                    };
+
+                    let mut size = Vec2::from([0.2; 2]);
+                    if collided {
+                        size[ori.vec_index()] = 0.6;
                     }
+                    renderer.write_vertex_buffer(
+                        1 + i as u32 + if let Horizontal = ori { 4 } else { 0 },
+                        Some(
+                            Mat4::from_translation(check_at.into_vec2_center().extend(0.))
+                                * Mat4::from_scale(size.extend(1.)),
+                        ),
+                    );
                 }
             }
         }
@@ -189,24 +209,6 @@ impl GameState {
         pos[ori.vec_index()] += 0.5;
         pos
     }
-    // fn correct_point_collider(pt: &mut Vec2, rect: Rect) -> bool {
-    //     if !rect.contains(*pt) {
-    //         return false;
-    //     }
-    //     let (idx, correction) = Orientation::iter_domain()
-    //         .map(|ori| {
-    //             let idx = ori.vec_index();
-    //             let a_rel = a_rel[idx];
-    //             let min_dist = min_dists[idx];
-    //             let a_corrected = if 0. < a_rel { min_dist } else { -min_dist };
-    //             let correction = a_corrected - a_rel;
-    //             (idx, correction)
-    //         })
-    //         .min_by_key(|(_, correction)| OrderedFloat(correction.abs()))
-    //         .unwrap();
-    //     a_pos[idx] += correction;
-    //     true
-    // }
     fn update_move_key(&mut self, dir: Direction, state: ElementState) {
         let ori = dir.orientation();
         self.pressing_state.map[ori].map[dir.sign()] = state;
@@ -216,11 +218,11 @@ impl GameState {
 
 impl DrivesMainLoop for GameState {
     fn render<B: Backend>(&mut self, _: &mut Renderer<B>) -> ProceedWith<(usize, &[DrawInfo])> {
-        Ok((self.tex_id, &self.draw_infos))
+        Ok(self.get_draw_args())
     }
 
     fn update<B: Backend>(&mut self, renderer: &mut Renderer<B>) -> Proceed {
-        self.world.move_and_collide(&mut self.net);
+        self.world.move_and_collide(&mut self.net, renderer);
         self.update_vertex_buffers(renderer);
         self.update_view_transforms();
         Ok(())
