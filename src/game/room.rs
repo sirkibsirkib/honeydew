@@ -151,12 +151,21 @@ impl Into<Coord> for Index {
 
 impl Coord {
     pub fn check_for_collisions_at(
-        ori: Orientation,
-        v: Vec2,
+        wall_ori: Orientation,
+        mut v: Vec2,
     ) -> impl Iterator<Item = Self> + Clone {
-        let tl = Self::from_vec2_floored(v + Vec2::from([-0.5, -1.0]));
-        let dims = [2, 3];
-        (0..dims[0]).flat_map(move |x| (0..dims[1]).map(move |y| Self::new([tl.x + x, tl.y + y])))
+        let tl = {
+            v[(!wall_ori).vec_index()] += 0.5;
+            Self::from_vec2_floored(v)
+        };
+        let dims = match wall_ori {
+            Horizontal => [3, 2],
+            Vertical => [2, 3],
+        };
+        (0..dims[0]).flat_map(move |x| {
+            (0..dims[1])
+                .map(move |y| Self::new([(tl.x + x).wrapping_sub(1), (tl.y + y).wrapping_sub(1)]))
+        })
     }
     pub fn part(self, ori: Orientation) -> u8 {
         match ori {

@@ -80,16 +80,19 @@ impl Rect {
         let (idx, correction) = Orientation::iter_domain()
             .map(|ori| {
                 let idx = ori.vec_index();
-                let clock_distance =
+                let to_center =
                     modulo_difference([pt[idx], self.center[idx]], ROOM_DIMS[idx] as f32);
-                let min_dist = self.size[idx];
-                let a_corrected = if 0. < clock_distance { min_dist } else { -min_dist };
-                let correction = a_corrected - clock_distance;
-                (idx, correction)
+                // let correction = self.size[idx]
+                //     + if 0. < to_center {
+                //         to_center - self.size[idx]
+                //     } else {
+                //         -to_center + self.size[idx]
+                //     };
+                (idx, to_center)
             })
             .min_by_key(|(_, correction)| OrderedFloat(correction.abs()))
             .unwrap();
-        pt[idx] = (pt[idx] + correction) % ROOM_DIMS[idx] as f32;
+        pt[idx] = (pt[idx] + correction + ROOM_DIMS[idx] as f32) % ROOM_DIMS[idx] as f32;
         true
     }
 }
