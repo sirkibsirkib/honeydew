@@ -81,7 +81,7 @@ impl Rect {
             .map(|dim| {
                 let idx = dim.vec_index();
                 let correct_up = modulo_difference(
-                    [self.center[idx] - self.size[idx], pt[idx]],
+                    [self.center[idx] - self.size[idx] + ROOM_DIMS[idx] as f32, pt[idx]],
                     ROOM_DIMS[idx] as f32,
                 );
                 let correct_down = modulo_difference(
