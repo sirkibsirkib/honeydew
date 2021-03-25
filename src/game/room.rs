@@ -1,5 +1,3 @@
-// # Imports and constants
-
 use {
     crate::{
         bit_set::{self, BitIndex, BitSet},
@@ -11,7 +9,8 @@ use {
 };
 
 pub const ROOM_SIZE: DimMap<u32> = DimMap { arr: [u16::MAX as u32 + 1; 2] };
-pub const CELLS: DimMap<u8> = DimMap { arr: [1 << 3; 2] };
+pub const CELLS: DimMap<u8> = DimMap { arr: [8, 8] };
+pub const TOT_CELLS: u16 = CELLS.arr[0] as u16 * CELLS.arr[1] as u16;
 pub const CELL_SIZE: DimMap<u16> = DimMap {
     arr: [
         (ROOM_SIZE.arr[0] / CELLS.arr[0] as u32) as u16,
@@ -19,12 +18,8 @@ pub const CELL_SIZE: DimMap<u16> = DimMap {
     ],
 };
 
-pub const HALF_CELL_SIZE: DimMap<u16> = DimMap {
-    arr: [
-        CELL_SIZE.arr[0] / 2, // yarp
-        CELL_SIZE.arr[1] / 2,
-    ],
-};
+pub const HALF_CELL_SIZE: DimMap<u16> =
+    DimMap { arr: [CELL_SIZE.arr[0] / 2, CELL_SIZE.arr[1] / 2] };
 
 ///////////////////////////////////////////////
 // # Data types
@@ -154,13 +149,6 @@ impl Room {
     }
 }
 
-impl Into<Coord> for BitIndex {
-    fn into(self) -> Coord {
-        let arr = [(self.0 % CELLS[X] as u16) as u8, (self.0 / CELLS[Y] as u16) as u8];
-        Coord { map: DimMap { arr } }
-    }
-}
-
 impl Coord {
     pub fn check_for_collisions_at(
         wall_dim: Dim,
@@ -228,5 +216,12 @@ impl Coord {
 impl Into<BitIndex> for Coord {
     fn into(self) -> BitIndex {
         BitIndex(self.map[Y] as u16 * CELLS[X] as u16 + self.map[X] as u16)
+    }
+}
+
+impl Into<Coord> for BitIndex {
+    fn into(self) -> Coord {
+        let arr = [(self.0 % CELLS[Y] as u16) as u8, (self.0 / CELLS[X] as u16) as u8];
+        Coord { map: DimMap { arr } }
     }
 }

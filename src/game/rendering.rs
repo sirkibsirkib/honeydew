@@ -1,7 +1,8 @@
+use crate::game::room::CELLS;
 use {
     crate::{
         game::{
-            GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE, TELEPORTER_SIZE,
+            GameState, MAX_WALLS, NUM_PLAYERS, NUM_TELEPORTERS, PLAYER_SIZE, TELEPORTER_SIZE,
             UP_WALL_SIZE,
         },
         prelude::*,
@@ -12,13 +13,13 @@ use {
         DrawInfo, MaxBufferArgs, Renderer, RendererConfig, RendererInitConfig, TexId, TexScissor,
     },
 };
-pub const INSTANCE_RANGE_PLAYERS: Range<u32> = 0..MAX_PLAYERS;
+pub const INSTANCE_RANGE_PLAYERS: Range<u32> = 0..NUM_PLAYERS;
 pub const INSTANCE_RANGE_TELEPORTERS: Range<u32> =
-    range_concat(INSTANCE_RANGE_PLAYERS, MAX_TELEPORTERS);
+    range_concat(INSTANCE_RANGE_PLAYERS, NUM_TELEPORTERS);
 pub const INSTANCE_RANGE_WALLS: Range<u32> = range_concat(INSTANCE_RANGE_TELEPORTERS, MAX_WALLS);
 pub const MAX_INSTANCES: u32 = INSTANCE_RANGE_WALLS.end;
 
-pub const WRAP_DRAW: bool = false;
+pub const WRAP_DRAW: bool = true;
 
 /////////////////////////////////
 pub fn render_config() -> RendererConfig<'static> {
@@ -73,15 +74,16 @@ impl GameState {
         self.update_teleporter_transforms(renderer);
     }
     pub fn update_view_transforms(&mut self) {
-        const SCALE: f32 = 1. / 16.;
-        const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
+        const ZOOM_OUT: f32 = 4.;
+        const SCALE_XY: Vec2 =
+            Vec2 { x: CELLS.arr[0] as f32 / ZOOM_OUT, y: CELLS.arr[1] as f32 / ZOOM_OUT };
         let translations = {
             let mut s = self.world.players[self.controlling].pos.to_screen2();
             // shift pos s.t. we focus on the replica closest to the center
             if WRAP_DRAW {
-                for value in s.as_mut() {
-                    if *value < 0.5 {
-                        *value += 0.5;
+                for idx in 0..2 {
+                    if s[idx] < 0.5 {
+                        s[idx] += 1.;
                     }
                 }
             }
@@ -127,7 +129,9 @@ impl GameState {
         // players
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_PLAYERS.start,
-            repeat(scissor_for_tile_at([3, 0])).take(self.world.players.len()),
+            [scissor_for_tile_at([1, 2]), scissor_for_tile_at([3, 2]), scissor_for_tile_at([5, 2])]
+                .iter()
+                .copied(),
         );
         // walls
         renderer.write_vertex_buffer(

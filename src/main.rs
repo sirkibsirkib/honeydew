@@ -8,9 +8,7 @@ mod wrap_fields;
 
 use {
     crate::{
-        game::{
-            rendering::render_config, room::Room, GameState, Net, Player, World, MAX_TELEPORTERS,
-        },
+        game::{rendering::render_config, GameState, Net, World},
         prelude::*,
         rng::Rng,
     },
@@ -23,34 +21,14 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 ) -> ProceedWith<&'static mut GameState> {
     let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
     let tex_id = renderer.load_texture(&texture);
-    let mut rng = Rng::new(Some(1));
-    let room = Room::new(&mut rng);
-    room.ascii_print();
-    const PLAYER_COUNT: u32 = 1;
-    let controlling = 0;
-    let mut world = World {
-        players: Vec::with_capacity(PLAYER_COUNT as usize),
-        teleporters: Default::default(),
-        room,
-    };
-    for _ in 0..PLAYER_COUNT {
-        let pos = world.random_free_space(&mut rng);
-        println!("player @ {:?}", pos);
-        let player = Player { pos, vel: Default::default() };
-        world.players.push(player);
-    }
-    for _ in 0..MAX_TELEPORTERS {
-        let pos = world.random_free_space(&mut rng);
-        println!("teleporter @ {:?}", pos);
-        world.teleporters.push(pos);
-    }
+    let maybe_seed = Some(1);
     let state = GameState {
-        net: Net::Server { rng },
-        world,
+        net: Net::Server { rng: Rng::new(None) },
+        world: World::random(maybe_seed),
         pressing_state: Default::default(),
         tex_id,
         draw_infos: GameState::init_draw_infos(),
-        controlling,
+        controlling: 0,
     };
     state.init_vertex_buffers(renderer);
     Ok(Box::leak(Box::new(state)))

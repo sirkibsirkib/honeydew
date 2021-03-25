@@ -1,11 +1,7 @@
-use crate::game::room::CELL_SIZE;
-use core::ops::Add;
-use core::ops::Div;
-use core::ops::Neg;
-use core::ops::Sub;
+use crate::game::room::ROOM_SIZE;
 use {
     crate::{prelude::*, rng::Rng},
-    core::ops::{Mul, Not},
+    core::ops::{Add, Div, Mul, Neg, Not, Sub},
 };
 ////////////////////////////////
 #[derive(Debug, Copy, Clone)]
@@ -39,14 +35,8 @@ impl DimMap<WrapInt> {
 }
 impl DimMap<u16> {
     pub fn to_screen2(self) -> Vec2 {
-        let f = move |dim| self[dim] as f32 / CELL_SIZE[dim] as f32;
+        let f = move |dim| self[dim] as f32 / ROOM_SIZE[dim] as f32;
         Vec2 { x: f(X), y: f(Y) }
-    }
-}
-impl DimMap<u16> {
-    pub const fn transposed(self) -> Self {
-        let Self { arr: [x, y] } = self;
-        Self { arr: [y, x] }
     }
 }
 impl<T> DimMap<T> {
