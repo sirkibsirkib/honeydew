@@ -10,9 +10,17 @@ use {
     core::ops::Neg,
 };
 
-pub const ROOM_DIMS: DimMap<u8> = DimMap { arr: [1 << 3; 2] };
-pub const CELL_SIZE: DimMap<u16> =
-    DimMap { arr: [u16_nth(ROOM_DIMS.arr[0] as u16), u16_nth(ROOM_DIMS.arr[1] as u16)] };
+pub const ROOM_SIZE: DimMap<u32> = DimMap { arr: [u16::MAX as u32 + 1; 2] };
+pub const CELLS: DimMap<u8> = DimMap { arr: [1 << 3; 2] };
+pub const CELL_SIZE: DimMap<u16> = DimMap {
+    arr: [
+        (ROOM_SIZE.arr[0] / CELLS.arr[0] as u32) as u16,
+        (ROOM_SIZE.arr[1] / CELLS.arr[1] as u32) as u16,
+    ],
+};
+
+pub const HALF_CELL_SIZE: DimMap<u16> =
+    DimMap { arr: [CELL_SIZE.arr[0] / 2, CELL_SIZE.arr[1] / 2] };
 
 ///////////////////////////////////////////////
 // # Data types
@@ -34,11 +42,6 @@ struct CrossesWallInfo {
     managed_by_src: bool,
 }
 
-//////////////////
-// helper funcs
-pub const fn u16_nth(n: u16) -> u16 {
-    ((u16::MAX as u32 + 1) / (n as u32)) as u16
-}
 /////////////////////
 
 impl Direction {
@@ -149,7 +152,7 @@ impl Room {
 
 impl Into<Coord> for BitIndex {
     fn into(self) -> Coord {
-        let arr = [(self.0 % ROOM_DIMS[X] as u16) as u8, (self.0 / ROOM_DIMS[Y] as u16) as u8];
+        let arr = [(self.0 % CELLS[X] as u16) as u8, (self.0 / CELLS[Y] as u16) as u8];
         Coord { map: DimMap { arr } }
     }
 }
@@ -157,10 +160,10 @@ impl Into<Coord> for BitIndex {
 impl Coord {
     pub fn check_for_collisions_at(
         wall_dim: Dim,
-        mut v: DimMap<f32>,
+        mut v: DimMap<WrapInt>,
     ) -> impl Iterator<Item = Self> + Clone {
         let tl = {
-            v[!wall_dim] += 0.5;
+            v[!wall_dim] += CELL_SIZE[!wall_dim];
             Self::from_vec2_floored(v)
         };
         let dims = match wall_dim {
@@ -186,7 +189,7 @@ impl Coord {
             Negative => {}
             Positive => {
                 let dim = dir.dim();
-                if self.map[dim] == ROOM_DIMS[dim] {
+                if self.map[dim] == CELLS[dim] {
                     self.map[dim] = 0;
                 } else {
                     self.map[dim] += 1;
@@ -200,8 +203,8 @@ impl Coord {
     }
     pub fn new([x, y]: [u8; 2]) -> Self {
         let mut me = Self::default();
-        me.map[X] = x % ROOM_DIMS[X];
-        me.map[Y] = y % ROOM_DIMS[Y];
+        me.map[X] = x % CELLS[X];
+        me.map[Y] = y % CELLS[Y];
         me
     }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
@@ -209,13 +212,13 @@ impl Coord {
     }
     pub fn iter_domain_lexicographic(
     ) -> impl Iterator<Item = impl Iterator<Item = Self> + Clone> + Clone {
-        (0..ROOM_DIMS[Y]).map(|y| (0..ROOM_DIMS[X]).map(move |x| Coord::new([x, y])))
+        (0..CELLS[Y]).map(|y| (0..CELLS[X]).map(move |x| Coord::new([x, y])))
     }
     pub fn stepped(mut self, dir: Direction) -> Self {
         let dim = dir.dim();
         self.map[dim] = match dir.sign() {
             Positive => {
-                if self.map[dim] == ROOM_DIMS[dim] {
+                if self.map[dim] == CELLS[dim] {
                     0
                 } else {
                     self.map[dim] + 1
@@ -223,7 +226,7 @@ impl Coord {
             }
             Negative => {
                 if self.map[dim] == 0 {
-                    ROOM_DIMS[dim] - 1
+                    CELLS[dim] - 1
                 } else {
                     self.map[dim] - 1
                 }
@@ -231,22 +234,23 @@ impl Coord {
         };
         self
     }
-    pub fn from_vec2_rounded(v: DimMap<f32>) -> Self {
-        Self::from_vec2_floored(v + DimMap { arr: [0.5; 2] })
+    pub fn from_vec2_rounded(v: DimMap<WrapInt>) -> Self {
+        Self::from_vec2_floored(v + HALF_CELL_SIZE.map(|value| WrapInt::from(value)))
     }
-    pub fn from_vec2_floored(v: DimMap<f32>) -> Self {
-        Self::new([v[X] as u8, v[Y] as u8])
+    pub fn into_vec2_center(self) -> DimMap<WrapInt> {
+        self.into_vec2_corner() + HALF_CELL_SIZE.map(|value| WrapInt::from(value))
     }
-    pub fn into_vec2_center(self) -> DimMap<f32> {
-        self.into_vec2_corner() + DimMap { arr: [0.5; 2] }
+    //
+    pub fn from_vec2_floored(pos: DimMap<WrapInt>) -> Self {
+        Self { map: pos.kv_map(|dim, &wi| (Into::<u16>::into(wi) / CELL_SIZE[dim]) as u8) }
     }
-    pub fn into_vec2_corner(self) -> DimMap<f32> {
-        self.map.map(|&c| c as f32)
+    pub fn into_vec2_corner(self) -> DimMap<WrapInt> {
+        self.map.kv_map(|dim, &value| WrapInt::from(value as u16 * CELL_SIZE[dim]))
     }
 }
 
 impl Into<BitIndex> for Coord {
     fn into(self) -> BitIndex {
-        BitIndex(self.map[Y] as u16 * ROOM_DIMS[X] as u16 + self.map[X] as u16)
+        BitIndex(self.map[Y] as u16 * CELLS[X] as u16 + self.map[X] as u16)
     }
 }

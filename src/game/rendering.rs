@@ -1,7 +1,7 @@
 use {
     crate::{
         game::{
-            room::ROOM_DIMS, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE,
+            room::CELLS, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE,
             TELEPORTER_SIZE, UP_WALL_SIZE,
         },
         prelude::*,
@@ -46,6 +46,7 @@ fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
         size: TILE_SIZE,
     }
 }
+
 impl GameState {
     pub fn get_draw_args(&self) -> (TexId, &[DrawInfo]) {
         let range = 0..if WRAP_DRAW { 4 } else { 1 };
@@ -75,27 +76,23 @@ impl GameState {
         const SCALE: f32 = 1. / 16.;
         const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
         let translations = {
-            const WH: DimMap<f32> =
-                DimMap { arr: [ROOM_DIMS.arr[0] as f32, ROOM_DIMS.arr[1] as f32] };
-            let mut base = self.world.players[self.controlling].pos;
-            // by default, we view the TOPLEFT copy!
+            let mut s = self.world.players[self.controlling].pos.to_screen2();
+            // shift pos s.t. we focus on the replica closest to the center
             if WRAP_DRAW {
-                for dim in Dim::iter_domain() {
-                    if base[dim] < WH[dim] * 0.5 {
-                        base[dim] += WH[dim];
+                for value in s.as_mut() {
+                    if *value < 0.5 {
+                        *value += 0.5;
                     }
                 }
             }
-            [
-                -base,
-                DimMap { arr: [WH[X], 0.] } - base,
-                DimMap { arr: [0., WH[Y]] } - base,
-                WH - base,
-            ]
+            s = -s;
+            let zero = DimMap::<f32>::default();
+
+            [s, s + [0., 1.].into(), s + [1., 0.].into(), s + [1., 1.].into()]
         };
-        for (draw_info, translation) in self.draw_infos.iter_mut().zip(translations.iter()) {
-            draw_info.view_transform = Mat4::from_scale(SCALE_XY.extend(1.))
-                * Mat4::from_translation(translation.extend(0.))
+        for (draw_info, pos_vec2) in self.draw_infos.iter_mut().zip(translations.iter()) {
+            draw_info.view_transform =
+                Mat4::from_scale(SCALE_XY.extend(1.)) * Mat4::from_translation(pos_vec2.extend(0.))
         }
     }
     fn update_tri_verts<B: Backend>(renderer: &mut Renderer<B>) {
@@ -103,21 +100,23 @@ impl GameState {
     }
     fn update_wall_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.room.iter_walls().map(move |(coord, dim)| {
-            Mat4::from_translation(GameState::wall_pos(coord, dim).extend(0.))
+            Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.))
                 * Mat4::from_rotation_z(if let Y = dim { PI_F32 * -0.5 } else { 0. })
-                * Mat4::from_scale(UP_WALL_SIZE.extend(1.))
+                * Mat4::from_scale(UP_WALL_SIZE.to_screen2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
     fn update_player_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.players.iter().map(move |player| {
-            Mat4::from_translation(player.pos.extend(0.)) * Mat4::from_scale(PLAYER_SIZE.extend(1.))
+            Mat4::from_translation(player.pos.to_screen2().extend(0.))
+                * Mat4::from_scale(PLAYER_SIZE.to_screen2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_PLAYERS.start, iter);
     }
     fn update_teleporter_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.teleporters.iter().map(move |pos| {
-            Mat4::from_translation(pos.extend(0.)) * Mat4::from_scale(TELEPORTER_SIZE.extend(1.))
+            Mat4::from_translation(pos.to_screen2().extend(0.))
+                * Mat4::from_scale(TELEPORTER_SIZE.to_screen2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_TELEPORTERS.start, iter);
     }

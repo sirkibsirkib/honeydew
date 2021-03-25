@@ -4,12 +4,15 @@ pub mod room;
 use {
     crate::{bit_set::INDICES, prelude::*, rng::Rng},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
-    room::{Coord, Room, ROOM_DIMS},
+    room::{Coord, Room, CELL_SIZE},
 };
 
-pub const PLAYER_SIZE: DimMap<f32> = DimMap { arr: [0.5; 2] };
-pub const TELEPORTER_SIZE: DimMap<f32> = DimMap { arr: [0.3; 2] };
-pub const UP_WALL_SIZE: DimMap<f32> = DimMap { arr: [1.0, 0.16] };
+pub const PLAYER_SIZE: DimMap<u16> =
+    DimMap { arr: [CELL_SIZE.arr[0] / 4 * 3, CELL_SIZE.arr[1] / 4 * 3] };
+pub const TELEPORTER_SIZE: DimMap<u16> =
+    DimMap { arr: [CELL_SIZE.arr[0] / 3, CELL_SIZE.arr[1] / 3] };
+pub const UP_WALL_SIZE: DimMap<u16> = DimMap { arr: [CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 8] };
+pub const MOV_SPEED: u16 = CELL_SIZE.arr[0] / 16;
 
 // allows an upper bound for renderer's instance buffers
 pub const MAX_TELEPORTERS: u32 = INDICES as u32 / 64;
@@ -18,8 +21,8 @@ pub const MAX_WALLS: u32 = INDICES as u32 * 2;
 /////////////////////////////////
 
 struct Rect {
-    center: DimMap<f32>,
-    size: DimMap<f32>,
+    center: DimMap<WrapInt>,
+    size: DimMap<u16>,
 }
 pub enum Net {
     Server { rng: Rng },
@@ -39,12 +42,12 @@ pub struct GameState {
 pub struct World {
     pub room: Room,
     pub players: Vec<Player>,
-    pub teleporters: Vec<DimMap<f32>>,
+    pub teleporters: Vec<DimMap<WrapInt>>,
 }
 
 #[derive(Debug)]
 pub struct Player {
-    pub pos: DimMap<f32>,
+    pub pos: DimMap<WrapInt>,
     pub vel: DimMap<Option<Sign>>,
 }
 #[derive(Default, Debug)]
@@ -83,8 +86,8 @@ impl Player {
                 let new_x = rect.aligned_to_edge(X.sign(!x_sign));
                 let new_y = rect.aligned_to_edge(Y.sign(!y_sign));
                 println!("{:?} vs {:?}", [new_x, new_y], self.pos);
-                if modulo_distance([new_x, self.pos[X]], ROOM_DIMS[X] as f32)
-                    < modulo_distance([new_y, self.pos[Y]], ROOM_DIMS[Y] as f32)
+                if (new_x - self.pos[X]).distance_from_zero()
+                    < (new_y - self.pos[Y]).distance_from_zero()
                 {
                     println!("X is less drastic");
                     self.pos[X] = new_x;
@@ -98,35 +101,28 @@ impl Player {
     }
 }
 impl Rect {
-    fn aligned_to_edge(&self, dir: Direction) -> f32 {
+    fn aligned_to_edge(&self, dir: Direction) -> WrapInt {
         println!("{:?}", dir);
         let dim = dir.dim();
-        let raw = self.center[dim] + dir.sign() * self.size[dim];
-        let bound = ROOM_DIMS[dim] as f32;
-        if raw < 0. {
-            raw + bound
-        } else if raw >= bound {
-            raw - bound
-        } else {
-            raw
-        }
+        self.center[dim] + dir.sign() * WrapInt::from(self.size[dim])
     }
-    fn contains(&self, pt: DimMap<f32>) -> bool {
-        const GRACE_DISTANCE: f32 = 0.01;
-        Dim::iter_domain().all(|dim| {
-            let pair = [pt[dim], self.center[dim]];
-            modulo_distance(pair, ROOM_DIMS[dim] as f32) < self.size[dim] - GRACE_DISTANCE
-        })
+    fn contains(&self, pt: DimMap<WrapInt>) -> bool {
+        Dim::iter_domain()
+            .all(|dim| (pt[dim] - self.center[dim]).distance_from_zero() < self.size[dim])
     }
 }
 impl World {
-    pub fn random_free_space(&self, rng: &mut Rng) -> DimMap<f32> {
-        const MIN_DIST: f32 = 2.0;
+    pub fn random_free_space(&self, rng: &mut Rng) -> DimMap<WrapInt> {
+        pub const MIN_DIST: DimMap<u16> =
+            DimMap { arr: [CELL_SIZE.arr[0] * 2, CELL_SIZE.arr[1] * 2] };
         loop {
             let new = Coord::random(rng).into_vec2_center();
             let mut pos_iter =
                 self.teleporters.iter().copied().chain(self.players.iter().map(|p| p.pos));
-            if pos_iter.all(|pos| pos.distance_squared(new) >= MIN_DIST * MIN_DIST) {
+            if pos_iter.all(move |pos| {
+                Dim::iter_domain()
+                    .any(move |dim| (pos[dim] - new[dim]).distance_from_zero() >= MIN_DIST[dim])
+            }) {
                 return new;
             }
         }
@@ -137,7 +133,7 @@ impl World {
             // println!("{:?}", player.pos);
             for dim in Dim::iter_domain() {
                 if let Some(sign) = player.vel[dim] {
-                    player.pos[dim] += sign * 0.05;
+                    player.pos[dim] += sign * WrapInt::from(MOV_SPEED);
                 }
             }
         }
@@ -154,8 +150,10 @@ impl World {
                 let player_pos = self.players[i].pos;
                 for j in 0..self.teleporters.len() {
                     let teleporter = self.teleporters[j];
-                    let rect =
-                        Rect { center: teleporter, size: (PLAYER_SIZE + TELEPORTER_SIZE) / 2. };
+                    let rect = Rect {
+                        center: teleporter,
+                        size: (PLAYER_SIZE + TELEPORTER_SIZE).map(|val| val / 2u16),
+                    };
                     if rect.contains(player_pos) {
                         self.players[i].pos = self.random_free_space(rng);
                         self.teleporters[j] = self.random_free_space(rng);
@@ -167,7 +165,6 @@ impl World {
         for player in &mut self.players {
             // 'correct_loop: loop {
             // wrap player positions
-            GameState::wrap_pos(&mut player.pos);
             println!("at {:?}", player.pos);
 
             // correct position wrt. player<->wall collisions
@@ -191,49 +188,36 @@ impl World {
                         false
                     };
 
-                    let mut size = DimMap { arr: [0.2; 2] };
-                    if collided {
-                        size[dim] = 0.6;
-                    }
-                    renderer.write_vertex_buffer(
-                        1 + i as u32 + if let X = dim { 4 } else { 0 },
-                        Some(
-                            Mat4::from_translation(check_at.into_vec2_center().extend(0.))
-                                * Mat4::from_scale(size.extend(1.)),
-                        ),
-                    );
+                    // let mut size = DimMap { arr: [0.2; 2] };
+                    // if collided {
+                    //     size[dim] = 0.6;
+                    // }
+                    // renderer.write_vertex_buffer(
+                    //     1 + i as u32 + if let X = dim { 4 } else { 0 },
+                    //     Some(
+                    //         Mat4::from_translation(check_at.into_vec2_center().extend(0.))
+                    //             * Mat4::from_scale(size.extend(1.)),
+                    //     ),
+                    // );
                 }
             }
         }
     }
 }
 impl GameState {
-    pub fn wrap_pos(pos: &mut DimMap<f32>) {
-        const BOUND: DimMap<f32> =
-            DimMap { arr: [ROOM_DIMS.arr[0] as f32, ROOM_DIMS.arr[1] as f32] };
-        for dim in Dim::iter_domain() {
-            let value = &mut pos[dim];
-            let bound = BOUND[dim];
-            if *value < 0. {
-                *value += bound;
-            } else if bound < *value {
-                *value -= bound;
-            }
-        }
+    fn wall_min_dists(dim: Dim) -> DimMap<u16> {
+        (Self::wall_size(dim) + PLAYER_SIZE).map(|val| val / 2u16)
     }
-    fn wall_min_dists(dim: Dim) -> DimMap<f32> {
-        (Self::wall_size(dim) + PLAYER_SIZE) * 0.5
-    }
-    pub fn wall_size(dim: Dim) -> DimMap<f32> {
+    pub fn wall_size(dim: Dim) -> DimMap<u16> {
         match dim {
             X => UP_WALL_SIZE,
-            Y => UP_WALL_SIZE.yx(),
+            Y => UP_WALL_SIZE.transposed(),
         }
     }
-    pub fn wall_pos(coord: Coord, dim: Dim) -> DimMap<f32> {
+    pub fn wall_pos(coord: Coord, dim: Dim) -> DimMap<WrapInt> {
         // e.g. Hdimzontal wall at Coord[0,0] has pos [0.5, 0.0]
         let mut pos = coord.into_vec2_corner();
-        pos[dim] += 0.5;
+        pos[dim] += CELL_SIZE[X] / 2;
         pos
     }
     fn update_move_key(&mut self, dir: Direction, state: ElementState) {

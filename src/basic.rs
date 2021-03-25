@@ -1,3 +1,4 @@
+use crate::game::room::CELL_SIZE;
 use core::ops::Add;
 use core::ops::Div;
 use core::ops::Neg;
@@ -37,16 +38,47 @@ impl DimMap<f32> {
         let dy = self[Y] - rhs[Y];
         dx * dx + dy * dy
     }
-    pub fn extend(self, z: f32) -> Vec3 {
-        Vec3::from([self[X], self[Y], z])
+}
+impl DimMap<WrapInt> {
+    pub fn to_screen2(self) -> Vec2 {
+        let f = move |dim| Into::<u16>::into(self[dim]) as f32 / (u16::MAX as u32 + 1) as f32;
+        Vec2 { x: f(X), y: f(Y) }
     }
-    pub fn yx(self) -> Self {
-        Self { arr: [self.arr[1], self.arr[0]] }
+}
+impl DimMap<u16> {
+    pub fn to_screen2(self) -> Vec2 {
+        let f = move |dim| Into::<u16>::into(self[dim]) as f32 / (u16::MAX as u32 + 1) as f32;
+        Vec2 { x: f(X), y: f(Y) }
+    }
+}
+impl DimMap<u16> {
+    pub const fn transposed(self) -> Self {
+        let Self { arr: [x, y] } = self;
+        Self { arr: [y, x] }
+    }
+}
+impl<T: Copy> DimMap<T> {
+    pub fn with(mut self, dim: Dim, x: T) -> Self {
+        self[dim] = x;
+        self
     }
 }
 impl<T> DimMap<T> {
-    pub fn map<N>(&self, f: fn(&T) -> N) -> DimMap<N> {
-        DimMap { arr: [f(&self.arr[0]), f(&self.arr[1])] }
+    pub fn map<N>(self, f: fn(T) -> N) -> DimMap<N> {
+        let [zero, one] = self.arr;
+        DimMap { arr: [f(zero), f(one)] }
+    }
+
+    #[inline]
+    pub fn kv_map<N>(&self, f: fn(Dim, &T) -> N) -> DimMap<N>
+    where
+        N: Default + Copy,
+    {
+        let mut new = DimMap { arr: [N::default(); 2] };
+        for dim in Dim::iter_domain() {
+            new[dim] = f(dim, &self[dim]);
+        }
+        new
     }
 }
 impl<T: Add<Output = T> + Copy> Add for DimMap<T> {
@@ -85,7 +117,10 @@ impl Mul<f32> for DimMap<f32> {
         self
     }
 }
-impl Neg for DimMap<f32> {
+impl<T> Neg for DimMap<T>
+where
+    T: Neg<Output = T> + Copy,
+{
     type Output = Self;
     fn neg(mut self) -> Self {
         for dim in Dim::iter_domain() {
@@ -136,6 +171,17 @@ impl Dim {
             X => 0,
             Y => 1,
         }
+    }
+}
+
+impl DimMap<u16> {
+    pub const fn diagonal(value: u16) -> Self {
+        Self { arr: [value; 2] }
+    }
+}
+impl DimMap<WrapInt> {
+    pub const fn diagonal(value: WrapInt) -> Self {
+        Self { arr: [value; 2] }
     }
 }
 
@@ -221,21 +267,21 @@ pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
         (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
     })
 }
-pub fn modulo_difference([a, b]: [f32; 2], modulus: f32) -> f32 {
-    // assume positive modulus
-    // assume {a, b} in 0..modulus
-    let wraps = (a - b).abs() > modulus / 2.;
-    if wraps {
-        (a + modulus) - b
-    } else {
-        a - b
-    }
-}
-pub fn modulo_distance([a, b]: [f32; 2], modulus: f32) -> f32 {
-    // assumes inputs are in range 0..modulus
-    let direct_dist = (a - b).abs();
-    (modulus - direct_dist).min(direct_dist)
-}
+// pub fn modulo_difference([a, b]: [f32; 2], modulus: f32) -> f32 {
+//     // assume positive modulus
+//     // assume {a, b} in 0..modulus
+//     let wraps = (a - b).abs() > modulus / 2.;
+//     if wraps {
+//         (a + modulus) - b
+//     } else {
+//         a - b
+//     }
+// }
+// pub fn modulo_distance([a, b]: [f32; 2], modulus: f32) -> f32 {
+//     // assumes inputs are in range 0..modulus
+//     let direct_dist = (a - b).abs();
+//     (modulus - direct_dist).min(direct_dist)
+// }
 
 /////////////////////////
 impl Sign {
@@ -246,10 +292,10 @@ impl Sign {
         Self::DOMAIN.iter().copied()
     }
 }
-impl Mul<f32> for Sign {
-    type Output = f32;
+impl<T: Neg<Output = T>> Mul<T> for Sign {
+    type Output = T;
     #[inline(always)]
-    fn mul(self, rhs: f32) -> <Self as Mul<f32>>::Output {
+    fn mul(self, rhs: T) -> T {
         match self {
             Positive => rhs,
             Negative => -rhs,

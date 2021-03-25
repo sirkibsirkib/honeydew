@@ -4,7 +4,7 @@ mod bit_set;
 mod game;
 mod prelude;
 mod rng;
-// mod wrap_fields;
+mod wrap_fields;
 
 use {
     crate::{

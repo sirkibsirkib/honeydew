@@ -1,11 +1,14 @@
 pub use {
-    crate::basic::{
-        iter_pairs_mut, modulo_difference, modulo_distance,
-        Dim::{self, *},
-        DimMap,
-        Direction::{self, *},
-        Sign::{self, *},
-        SignMap,
+    crate::{
+        basic::{
+            iter_pairs_mut,
+            Dim::{self, *},
+            DimMap,
+            Direction::{self, *},
+            Sign::{self, *},
+            SignMap,
+        },
+        wrap_fields::WrapInt,
     },
     core::{
         cmp::Ordering,
@@ -16,3 +19,20 @@ pub use {
     ordered_float::OrderedFloat,
     std::collections::HashSet,
 };
+
+macro_rules! dim_map {
+    ($func:expr) => {{
+        DimMap {
+            arr: [
+                {
+                    let idx = 0;
+                    $func
+                },
+                {
+                    let idx = 1;
+                    $func
+                },
+            ],
+        }
+    }};
+}

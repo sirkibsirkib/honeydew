@@ -1,5 +1,5 @@
 use {
-    crate::{game::room::ROOM_DIMS, prelude::*, rng::Rng},
+    crate::{game::room::CELLS, prelude::*, rng::Rng},
     core::iter::FromIterator,
 };
 
@@ -7,7 +7,7 @@ use {
 This is an unfortunate case of coupling. What we REALLY want here
 is the use of constant generics, to make INDICES a type parameter.
 */
-pub const INDICES: u16 = ROOM_DIMS.arr[0] as u16 * ROOM_DIMS.arr[1] as u16;
+pub const INDICES: u16 = CELLS.arr[0] as u16 * CELLS.arr[1] as u16;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct BitIndex(pub(crate) u16); // invariant: < INDICES
