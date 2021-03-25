@@ -130,23 +130,6 @@ impl Room {
         let dimmed_iter = move |o| self.wall_sets[o].iter().map(move |i| (i.into(), o));
         dimmed_iter(X).chain(dimmed_iter(Y))
     }
-    pub fn ascii_print(&self) {
-        let stdout = std::io::stdout();
-        let mut stdout = stdout.lock();
-        use std::io::Write;
-        for row_iter in Coord::iter_domain_lexicographic() {
-            for coord in row_iter.clone() {
-                let up_char = if self.wall_sets[X].contains(coord.into()) { '-' } else { ' ' };
-                let _ = write!(stdout, "·{}{}", up_char, up_char);
-            }
-            let _ = writeln!(stdout);
-            for coord in row_iter {
-                let left_char = if self.wall_sets[Y].contains(coord.into()) { '|' } else { ' ' };
-                let _ = write!(stdout, "{}  ", left_char);
-            }
-            let _ = writeln!(stdout);
-        }
-    }
 }
 
 impl Coord {
@@ -177,29 +160,11 @@ impl Coord {
         me.map[Y] = y % CELLS[Y];
         me
     }
-    pub fn iter_domain_lexicographic(
-    ) -> impl Iterator<Item = impl Iterator<Item = Self> + Clone> + Clone {
-        (0..CELLS[Y]).map(|y| (0..CELLS[X]).map(move |x| Coord::new([x, y])))
-    }
-    pub fn stepped(mut self, dir: Direction) -> Self {
+    pub fn stepped(self, dir: Direction) -> Self {
         let dim = dir.dim();
-        self.map[dim] = match dir.sign() {
-            Positive => {
-                if self.map[dim] == CELLS[dim] {
-                    0
-                } else {
-                    self.map[dim] + 1
-                }
-            }
-            Negative => {
-                if self.map[dim] == 0 {
-                    CELLS[dim] - 1
-                } else {
-                    self.map[dim] - 1
-                }
-            }
-        };
-        self
+        let mut vec2 = self.into_vec2_corner();
+        vec2[dim] += CELL_SIZE[dim];
+        Self::from_vec2_floored(vec2)
     }
     pub fn into_vec2_center(self) -> DimMap<WrapInt> {
         self.into_vec2_corner() + HALF_CELL_SIZE.map(|value| WrapInt::from(value))
