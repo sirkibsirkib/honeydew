@@ -19,20 +19,3 @@ pub use {
     ordered_float::OrderedFloat,
     std::collections::HashSet,
 };
-
-macro_rules! dim_map {
-    ($func:expr) => {{
-        DimMap {
-            arr: [
-                {
-                    let idx = 0;
-                    $func
-                },
-                {
-                    let idx = 1;
-                    $func
-                },
-            ],
-        }
-    }};
-}

@@ -60,9 +60,6 @@ impl BitIndex {
             idx_in: (self.0 % BitSet::WORD_SIZE) as usize,
         }
     }
-    pub fn iter_domain() -> impl Iterator<Item = Self> {
-        (Self::DOMAIN).map(BitIndex)
-    }
     pub fn random(rng: &mut Rng) -> Self {
         Self(rng.fastrand_rng.u16(Self::DOMAIN))
     }
@@ -122,16 +119,6 @@ impl BitSet {
         }
         self.restore_invariant()
     }
-    // pub fn add_set(&mut self, other: &Self) {
-    //     for (mine, theirs) in self.words.iter_mut().zip(other.words.iter()) {
-    //         *mine |= theirs;
-    //     }
-    // }
-    // pub fn remove_set(&mut self, other: &Self) {
-    //     for (mine, theirs) in self.words.iter_mut().zip(other.words.iter()) {
-    //         *mine |= theirs;
-    //     }
-    // }
     pub fn iter(&self) -> BitSetIter {
         BitSetIter { bit_set: self, cached_word: 0, next_idx_of: 0 }
     }

@@ -19,8 +19,12 @@ pub const CELL_SIZE: DimMap<u16> = DimMap {
     ],
 };
 
-pub const HALF_CELL_SIZE: DimMap<u16> =
-    DimMap { arr: [CELL_SIZE.arr[0] / 2, CELL_SIZE.arr[1] / 2] };
+pub const HALF_CELL_SIZE: DimMap<u16> = DimMap {
+    arr: [
+        CELL_SIZE.arr[0] / 2, // yarp
+        CELL_SIZE.arr[1] / 2,
+    ],
+};
 
 ///////////////////////////////////////////////
 // # Data types
@@ -176,28 +180,6 @@ impl Coord {
             })
         })
     }
-    pub fn manhattan_distance(self, rhs: Self) -> u16 {
-        Dim::iter_domain()
-            .map(|dim| {
-                let [a, b] = [self.map[dim], rhs.map[dim]];
-                a.wrapping_sub(b).min(b.wrapping_sub(a)) as u16
-            })
-            .sum()
-    }
-    pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
-        match dir.sign() {
-            Negative => {}
-            Positive => {
-                let dim = dir.dim();
-                if self.map[dim] == CELLS[dim] {
-                    self.map[dim] = 0;
-                } else {
-                    self.map[dim] += 1;
-                }
-            }
-        }
-        self
-    }
     pub fn random(rng: &mut Rng) -> Self {
         BitIndex::random(rng).into()
     }
@@ -206,9 +188,6 @@ impl Coord {
         me.map[X] = x % CELLS[X];
         me.map[Y] = y % CELLS[Y];
         me
-    }
-    pub fn iter_domain() -> impl Iterator<Item = Self> {
-        BitIndex::iter_domain().map(Into::into)
     }
     pub fn iter_domain_lexicographic(
     ) -> impl Iterator<Item = impl Iterator<Item = Self> + Clone> + Clone {
@@ -233,9 +212,6 @@ impl Coord {
             }
         };
         self
-    }
-    pub fn from_vec2_rounded(v: DimMap<WrapInt>) -> Self {
-        Self::from_vec2_floored(v + HALF_CELL_SIZE.map(|value| WrapInt::from(value)))
     }
     pub fn into_vec2_center(self) -> DimMap<WrapInt> {
         self.into_vec2_corner() + HALF_CELL_SIZE.map(|value| WrapInt::from(value))

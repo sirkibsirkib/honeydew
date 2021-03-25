@@ -127,7 +127,7 @@ impl World {
             }
         }
     }
-    fn move_and_collide<B: Backend>(&mut self, net: &mut Net, renderer: &mut Renderer<B>) {
+    fn move_and_collide(&mut self, net: &mut Net) {
         // update player positions wrt. movement
         for player in &mut self.players {
             // println!("{:?}", player.pos);
@@ -163,42 +163,18 @@ impl World {
         }
 
         for player in &mut self.players {
-            // 'correct_loop: loop {
-            // wrap player positions
             println!("at {:?}", player.pos);
 
             // correct position wrt. player<->wall collisions
             for dim in Dim::iter_domain() {
-                let four_around = Coord::check_for_collisions_at(dim, player.pos);
-                for (i, check_at) in four_around.enumerate() {
-                    let collided = if self.room.wall_sets[dim].contains(check_at.into()) {
+                for check_at in Coord::check_for_collisions_at(dim, player.pos) {
+                    if self.room.wall_sets[dim].contains(check_at.into()) {
                         let rect = Rect {
                             center: GameState::wall_pos(check_at, dim),
                             size: GameState::wall_min_dists(dim),
                         };
-                        let collided = player.try_collide(&rect);
-                        if collided {
-                            println!("COLLIDED");
-                        }
-                        true
-                        // if collided {
-                        //     continue 'correct_loop;
-                        // }
-                    } else {
-                        false
-                    };
-
-                    // let mut size = DimMap { arr: [0.2; 2] };
-                    // if collided {
-                    //     size[dim] = 0.6;
-                    // }
-                    // renderer.write_vertex_buffer(
-                    //     1 + i as u32 + if let X = dim { 4 } else { 0 },
-                    //     Some(
-                    //         Mat4::from_translation(check_at.into_vec2_center().extend(0.))
-                    //             * Mat4::from_scale(size.extend(1.)),
-                    //     ),
-                    // );
+                        player.try_collide(&rect);
+                    }
                 }
             }
         }
@@ -233,7 +209,7 @@ impl DrivesMainLoop for GameState {
     }
 
     fn update<B: Backend>(&mut self, renderer: &mut Renderer<B>) -> Proceed {
-        self.world.move_and_collide(&mut self.net, renderer);
+        self.world.move_and_collide(&mut self.net);
         self.update_vertex_buffers(renderer);
         self.update_view_transforms();
         Ok(())

@@ -32,22 +32,14 @@ pub enum Sign {
 pub struct DimMap<T> {
     pub arr: [T; 2],
 }
-impl DimMap<f32> {
-    pub fn distance_squared(self, rhs: Self) -> f32 {
-        let dx = self[X] - rhs[X];
-        let dy = self[Y] - rhs[Y];
-        dx * dx + dy * dy
-    }
-}
 impl DimMap<WrapInt> {
     pub fn to_screen2(self) -> Vec2 {
-        let f = move |dim| Into::<u16>::into(self[dim]) as f32 / (u16::MAX as u32 + 1) as f32;
-        Vec2 { x: f(X), y: f(Y) }
+        self.map(Into::<u16>::into).to_screen2()
     }
 }
 impl DimMap<u16> {
     pub fn to_screen2(self) -> Vec2 {
-        let f = move |dim| Into::<u16>::into(self[dim]) as f32 / (u16::MAX as u32 + 1) as f32;
+        let f = move |dim| self[dim] as f32 / CELL_SIZE[dim] as f32;
         Vec2 { x: f(X), y: f(Y) }
     }
 }
@@ -55,12 +47,6 @@ impl DimMap<u16> {
     pub const fn transposed(self) -> Self {
         let Self { arr: [x, y] } = self;
         Self { arr: [y, x] }
-    }
-}
-impl<T: Copy> DimMap<T> {
-    pub fn with(mut self, dim: Dim, x: T) -> Self {
-        self[dim] = x;
-        self
     }
 }
 impl<T> DimMap<T> {
@@ -174,124 +160,13 @@ impl Dim {
     }
 }
 
-impl DimMap<u16> {
-    pub const fn diagonal(value: u16) -> Self {
-        Self { arr: [value; 2] }
-    }
-}
-impl DimMap<WrapInt> {
-    pub const fn diagonal(value: WrapInt) -> Self {
-        Self { arr: [value; 2] }
-    }
-}
-
-// #[derive(Debug)]
-// pub struct Arr2Map<K: Arr2MapKey, V> {
-//     pub arr: [V; 2],
-//     _phantom: PhantomData<K>,
-// }
-
-// impl<K: Arr2MapKey, V: Clone> Clone for Arr2Map<K, V> {
-//     fn clone(&self) -> Self {
-//         Self::new([self.arr[0], self.arr[1]])
-//     }
-// }
-// impl<K: Arr2MapKey, V: Copy> Copy for Arr2Map<K, V> {}
-
-// pub trait Arr2MapKey {
-//     const ONE_INDEX_FN: fn(Self) -> bool;
-// }
-// impl<K: Arr2MapKey, V> Arr2Map<K, V> {
-//     pub fn new_cloning(both: V) -> Self
-//     where
-//         V: Clone,
-//     {
-//         Self::new([both.clone(), both])
-//     }
-//     pub fn new(arr: [V; 2]) -> Self {
-//         Self { arr, _phantom: PhantomData {} }
-//     }
-// }
-
-// impl<K: Arr2MapKey, V> Index<K> for Arr2Map<K, V> {
-//     type Output = V;
-//     #[inline]
-//     fn index(&self, key: K) -> &V {
-//         &self.arr[if K::ONE_INDEX_FN(key) { 1 } else { 0 }]
-//     }
-// }
-// impl<K: Arr2MapKey, V> IndexMut<K> for Arr2Map<K, V> {
-//     #[inline]
-//     fn index_mut(&mut self, key: K) -> &mut V {
-//         &mut self.arr[if K::ONE_INDEX_FN(key) { 1 } else { 0 }]
-//     }
-// }
-
-// impl Arr2MapKey for Dim {
-//     const ONE_INDEX_FN: fn(Self) -> bool = |dim| match dim {
-//         X => false,
-//         Y => true,
-//     };
-// }
-// impl Arr2MapKey for Sign {
-//     const ONE_INDEX_FN: fn(Self) -> bool = |sign| match sign {
-//         Negative => false,
-//         Positive => true,
-//     };
-// }
-
-// pub struct DimMap<T>([T; 2]);
-/////////////////////////
-
-// impl<T> Index<Dim> for DimMap<T> {
-//     type Output = T;
-//     fn index(&self, dim: Dim) -> &T {
-//         &self.0[dim.vec_index()]
-//     }
-// }
-// impl<T> IndexMut<Dim> for DimMap<T> {
-//     fn index_mut(&mut self, dim: Dim) -> &mut T {
-//         &mut self.0[dim.vec_index()]
-//     }
-// }
-
-// pub fn iter_pairs<T>(slice: &[T]) -> impl Iterator<Item = [&T; 2]> {
-//     (0..slice.len() - 1).flat_map(move |left| {
-//         (left + 1..slice.len())
-//             .map(move |right| unsafe { [slice.get_unchecked(left), slice.get_unchecked(right)] })
-//     })
-// }
 pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
     let p = slice.as_mut_ptr();
     (0..slice.len() - 1).flat_map(move |left| {
         (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
     })
 }
-// pub fn modulo_difference([a, b]: [f32; 2], modulus: f32) -> f32 {
-//     // assume positive modulus
-//     // assume {a, b} in 0..modulus
-//     let wraps = (a - b).abs() > modulus / 2.;
-//     if wraps {
-//         (a + modulus) - b
-//     } else {
-//         a - b
-//     }
-// }
-// pub fn modulo_distance([a, b]: [f32; 2], modulus: f32) -> f32 {
-//     // assumes inputs are in range 0..modulus
-//     let direct_dist = (a - b).abs();
-//     (modulus - direct_dist).min(direct_dist)
-// }
-
 /////////////////////////
-impl Sign {
-    pub const DOMAIN: [Self; 2] = [Positive, Negative];
-
-    #[inline(always)]
-    pub fn iter_domain() -> impl Iterator<Item = Self> {
-        Self::DOMAIN.iter().copied()
-    }
-}
 impl<T: Neg<Output = T>> Mul<T> for Sign {
     type Output = T;
     #[inline(always)]
@@ -323,16 +198,6 @@ impl Not for Sign {
     }
 }
 
-// impl Arr2MapKey for Dim {
-//     #[inline]
-//     fn array_index(self) -> usize {
-//         match self {
-//             X => 0,
-//             Y => 1,
-//         }
-//     }
-// }
-
 impl Dim {
     pub const DOMAIN: [Self; 2] = [X, Y];
 
@@ -354,12 +219,6 @@ impl Dim {
 }
 
 impl Direction {
-    pub const DOMAIN: [Self; 4] = [Up, Down, Left, Right];
-
-    pub fn iter_domain() -> impl Iterator<Item = Self> {
-        Self::DOMAIN.iter().copied()
-    }
-
     #[inline(always)]
     pub const fn new(dim: Dim, sign: Sign) -> Self {
         match (dim, sign) {

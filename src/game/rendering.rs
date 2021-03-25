@@ -1,8 +1,8 @@
 use {
     crate::{
         game::{
-            room::CELLS, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE,
-            TELEPORTER_SIZE, UP_WALL_SIZE,
+            GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE, TELEPORTER_SIZE,
+            UP_WALL_SIZE,
         },
         prelude::*,
     },
@@ -18,7 +18,7 @@ pub const INSTANCE_RANGE_TELEPORTERS: Range<u32> =
 pub const INSTANCE_RANGE_WALLS: Range<u32> = range_concat(INSTANCE_RANGE_TELEPORTERS, MAX_WALLS);
 pub const MAX_INSTANCES: u32 = INSTANCE_RANGE_WALLS.end;
 
-pub const WRAP_DRAW: bool = true;
+pub const WRAP_DRAW: bool = false;
 
 /////////////////////////////////
 pub fn render_config() -> RendererConfig<'static> {
@@ -85,10 +85,7 @@ impl GameState {
                     }
                 }
             }
-            s = -s;
-            let zero = DimMap::<f32>::default();
-
-            [s, s + [0., 1.].into(), s + [1., 0.].into(), s + [1., 1.].into()]
+            [-s, -s + [0., 1.].into(), -s + [1., 0.].into(), -s + [1., 1.].into()]
         };
         for (draw_info, pos_vec2) in self.draw_infos.iter_mut().zip(translations.iter()) {
             draw_info.view_transform =
