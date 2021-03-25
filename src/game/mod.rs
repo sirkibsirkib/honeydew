@@ -2,7 +2,7 @@ pub mod rendering;
 pub mod room;
 
 use {
-    crate::{basic::*, bit_set::INDICES, rng::Rng},
+    crate::{bit_set::INDICES, prelude::*, rng::Rng, wrap_fields::WrapVec2},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
     room::{Coord, Room, ROOM_DIMS},
 };
@@ -38,12 +38,12 @@ pub struct GameState {
 pub struct World {
     pub room: Room,
     pub players: Vec<Player>,
-    pub teleporters: Vec<Vec2>,
+    pub teleporters: Vec<WrapVec2>,
 }
 
 #[derive(Debug)]
 pub struct Player {
-    pub pos: Vec2,
+    pub pos: WrapVec2,
     pub vel: EnumMap<Dim, Option<Sign>>,
 }
 #[derive(Default, Debug)]
@@ -100,12 +100,12 @@ impl Rect {
 }
 impl World {
     pub fn random_free_space(&self, rng: &mut Rng) -> Vec2 {
-        const MIN_DIST: f32 = 2.;
+        const MIN_DIST: u32 = CELL_SIZE[X];
         loop {
             let new = Coord::random(rng).into_vec2_center();
             let mut pos_iter =
                 self.teleporters.iter().copied().chain(self.players.iter().map(|p| p.pos));
-            if pos_iter.all(|pos| pos.distance_squared(new) >= MIN_DIST * MIN_DIST) {
+            if pos_iter.all(|pos| pos.distance_squared(new) >= MIN_DIST) {
                 return new;
             }
         }

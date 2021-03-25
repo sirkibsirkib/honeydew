@@ -2,14 +2,16 @@
 
 use {
     crate::{
-        basic::*,
         bit_set::{self, BitSet, Index},
+        prelude::*,
         rng::Rng,
+        wrap_fields::WrapVec2,
         Dim,
     },
     core::ops::Neg,
 };
-pub const ROOM_DIMS: [u8; 2] = [8; 2];
+pub const ROOM_DIMS: [u8; 2] = [8; 2]; // for best results: keep elements power of two
+pub const CELL_SIZE: [u16; 2] = [u16_nth(ROOM_DIMS[0] as u16), u16_nth(ROOM_DIMS[1] as u16)];
 
 ///////////////////////////////////////////////
 // # Data types
@@ -32,6 +34,13 @@ struct CrossesWallInfo {
     managed_by_src: bool,
 }
 
+//////////////////
+// helper funcs
+pub const fn u16_nth(n: u16) -> u16 {
+    ((u16::MAX as u32 + 1) / (n as u32)) as u16
+}
+/////////////////////
+
 impl Direction {
     fn crosses_wall_info(self) -> CrossesWallInfo {
         CrossesWallInfo {
@@ -49,8 +58,8 @@ impl Neg for Direction {
         match self {
             Up => Down,
             Down => Up,
-            Right => Left,
             Left => Right,
+            Right => Left,
         }
     }
 }

@@ -1,17 +1,42 @@
 use {
-    crate::rng::Rng,
+    crate::{prelude::*, rng::Rng},
     core::ops::{Mul, Not},
 };
-pub use {
-    core::{cmp::Ordering, f32::consts::PI as PI_F32, ops::Range},
-    enum_map::EnumMap,
-    gfx_2020::{glam::Vec2Swizzles, Mat4, Vec2, Vec3},
-    ordered_float::OrderedFloat,
-    std::collections::HashSet,
-    Dim::*,
-    Direction::*,
-    Sign::*,
-};
+////////////////////////////////
+#[derive(Debug, Copy, Clone)]
+pub enum Direction {
+    Up = 0,
+    Down = 1,
+    Left = 2,
+    Right = 3,
+}
+
+#[derive(Copy, Clone, Debug, enum_map::Enum)]
+pub enum Dim {
+    X = 0,
+    Y = 1,
+}
+
+#[derive(Copy, Clone, Debug, enum_map::Enum)]
+pub enum Sign {
+    Positive = 0,
+    Negative = 1,
+}
+
+// pub struct DimMap<T>([T; 2]);
+/////////////////////////
+
+// impl<T> Index<Dim> for DimMap<T> {
+//     type Output = T;
+//     fn index(&self, dim: Dim) -> &T {
+//         &self.0[dim.vec_index()]
+//     }
+// }
+// impl<T> IndexMut<Dim> for DimMap<T> {
+//     fn index_mut(&mut self, dim: Dim) -> &mut T {
+//         &mut self.0[dim.vec_index()]
+//     }
+// }
 
 pub fn iter_pairs<T>(slice: &[T]) -> impl Iterator<Item = [&T; 2]> {
     (0..slice.len() - 1).flat_map(move |left| {
@@ -40,32 +65,14 @@ pub fn modulo_distance([a, b]: [f32; 2], modulus: f32) -> f32 {
     let direct_dist = (a - b).abs();
     (modulus - direct_dist).min(direct_dist)
 }
-////////////////////////////////
-#[derive(Debug, Copy, Clone)]
-pub enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-#[derive(Copy, Clone, Debug, enum_map::Enum)]
-pub enum Dim {
-    X,
-    Y,
-}
-
-#[derive(Copy, Clone, Debug, enum_map::Enum)]
-pub enum Sign {
-    Positive,
-    Negative,
-}
 
 /////////////////////////
 impl Sign {
+    pub const DOMAIN: [Self; 2] = [Positive, Negative];
+
     #[inline(always)]
     pub fn iter_domain() -> impl Iterator<Item = Self> {
-        [Positive, Negative].iter().copied()
+        Self::DOMAIN.iter().copied()
     }
 }
 impl Mul<f32> for Sign {
@@ -90,13 +97,15 @@ impl Not for Dim {
 }
 
 impl Dim {
+    pub const DOMAIN: [Self; 2] = [X, Y];
+
     #[inline(always)]
     pub fn sign(self, sign: Sign) -> Direction {
         Direction::new(self, sign)
     }
     #[inline(always)]
     pub fn iter_domain() -> impl Iterator<Item = Self> {
-        [X, Y].iter().copied()
+        Self::DOMAIN.iter().copied()
     }
     pub fn random(rng: &mut Rng) -> Self {
         if rng.gen_bool() {
@@ -115,6 +124,12 @@ impl Dim {
 }
 
 impl Direction {
+    pub const DOMAIN: [Self; 4] = [Up, Down, Left, Right];
+
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        Self::DOMAIN.iter().copied()
+    }
+
     #[inline(always)]
     pub const fn new(dim: Dim, sign: Sign) -> Self {
         match (dim, sign) {

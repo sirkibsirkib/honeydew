@@ -1,10 +1,10 @@
 use {
     crate::{
-        basic::*,
         game::{
             room::ROOM_DIMS, GameState, MAX_PLAYERS, MAX_TELEPORTERS, MAX_WALLS, PLAYER_SIZE,
             TELEPORTER_SIZE, UP_WALL_SIZE,
         },
+        prelude::*,
     },
     gfx_2020::{
         gfx_hal::{pso::Face, window::Extent2D, Backend},

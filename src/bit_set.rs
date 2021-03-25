@@ -1,5 +1,5 @@
 use {
-    crate::{basic::*, game::room::ROOM_DIMS, rng::Rng},
+    crate::{game::room::ROOM_DIMS, prelude::*, rng::Rng},
     core::iter::FromIterator,
 };
 
@@ -52,7 +52,7 @@ impl FromIterator<Index> for BitSet {
 }
 
 impl Index {
-    const DOMAIN_RANGE: Range<u16> = 0..INDICES;
+    pub const DOMAIN: Range<u16> = 0..INDICES;
     #[inline]
     fn split(self) -> SplitIndex {
         SplitIndex {
@@ -61,10 +61,10 @@ impl Index {
         }
     }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
-        (Self::DOMAIN_RANGE).map(Index)
+        (Self::DOMAIN).map(Index)
     }
     pub fn random(rng: &mut Rng) -> Self {
-        Self(rng.fastrand_rng.u16(Self::DOMAIN_RANGE))
+        Self(rng.fastrand_rng.u16(Self::DOMAIN))
     }
 }
 
@@ -122,16 +122,16 @@ impl BitSet {
         }
         self.restore_invariant()
     }
-    pub fn add_set(&mut self, other: &Self) {
-        for (mine, theirs) in self.words.iter_mut().zip(other.words.iter()) {
-            *mine |= theirs;
-        }
-    }
-    pub fn remove_set(&mut self, other: &Self) {
-        for (mine, theirs) in self.words.iter_mut().zip(other.words.iter()) {
-            *mine |= theirs;
-        }
-    }
+    // pub fn add_set(&mut self, other: &Self) {
+    //     for (mine, theirs) in self.words.iter_mut().zip(other.words.iter()) {
+    //         *mine |= theirs;
+    //     }
+    // }
+    // pub fn remove_set(&mut self, other: &Self) {
+    //     for (mine, theirs) in self.words.iter_mut().zip(other.words.iter()) {
+    //         *mine |= theirs;
+    //     }
+    // }
     pub fn iter(&self) -> BitSetIter {
         BitSetIter { bit_set: self, cached_word: 0, next_idx_of: 0 }
     }
