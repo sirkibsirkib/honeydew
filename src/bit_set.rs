@@ -7,10 +7,10 @@ use {
 This is an unfortunate case of coupling. What we REALLY want here
 is the use of constant generics, to make INDICES a type parameter.
 */
-pub const INDICES: u16 = ROOM_DIMS[0] as u16 * ROOM_DIMS[1] as u16;
+pub const INDICES: u16 = ROOM_DIMS.arr[0] as u16 * ROOM_DIMS.arr[1] as u16;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct Index(pub(crate) u16); // invariant: < INDICES
+pub struct BitIndex(pub(crate) u16); // invariant: < INDICES
 
 pub struct BitSet {
     // invariant: bits outside of range 0..INDICES are zero
@@ -21,7 +21,7 @@ pub struct BitSetIter<'a> {
     cached_word: usize,
     next_idx_of: u16,
 }
-struct SplitIndex {
+struct SplitBitIndex {
     idx_in: usize, // invariant: < BitSet::WORD_SIZE
     idx_of: usize, // invariant: < BitSet::WORDS
 }
@@ -31,18 +31,18 @@ impl Default for BitSet {
         Self { words: [0; Self::WORDS as usize] }
     }
 }
-impl SplitIndex {
+impl SplitBitIndex {
     #[inline]
-    fn unsplit(self) -> Index {
-        Index(self.idx_of as u16 * BitSet::WORD_SIZE + self.idx_in as u16)
+    fn unsplit(self) -> BitIndex {
+        BitIndex(self.idx_of as u16 * BitSet::WORD_SIZE + self.idx_in as u16)
     }
 }
 const fn div_round_up(x: u16, y: u16) -> u16 {
     (x + y - 1) / y
 }
 
-impl FromIterator<Index> for BitSet {
-    fn from_iter<I: IntoIterator<Item = Index>>(iter: I) -> Self {
+impl FromIterator<BitIndex> for BitSet {
+    fn from_iter<I: IntoIterator<Item = BitIndex>>(iter: I) -> Self {
         let mut bs = BitSet::default();
         for i in iter {
             bs.insert(i);
@@ -51,17 +51,17 @@ impl FromIterator<Index> for BitSet {
     }
 }
 
-impl Index {
+impl BitIndex {
     pub const DOMAIN: Range<u16> = 0..INDICES;
     #[inline]
-    fn split(self) -> SplitIndex {
-        SplitIndex {
+    fn split(self) -> SplitBitIndex {
+        SplitBitIndex {
             idx_of: (self.0 / BitSet::WORD_SIZE) as usize,
             idx_in: (self.0 % BitSet::WORD_SIZE) as usize,
         }
     }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
-        (Self::DOMAIN).map(Index)
+        (Self::DOMAIN).map(BitIndex)
     }
     pub fn random(rng: &mut Rng) -> Self {
         Self(rng.fastrand_rng.u16(Self::DOMAIN))
@@ -71,16 +71,16 @@ impl Index {
 impl BitSet {
     const WORD_SIZE: u16 = core::mem::size_of::<usize>() as u16 * 8;
     const WORDS: u16 = div_round_up(INDICES, Self::WORD_SIZE);
-    fn word_and_mask(&self, bit_index: Index) -> (usize, usize) {
-        let SplitIndex { idx_of, idx_in } = bit_index.split();
+    fn word_and_mask(&self, bit_index: BitIndex) -> (usize, usize) {
+        let SplitBitIndex { idx_of, idx_in } = bit_index.split();
         let word = unsafe {
             // safe! relies on invariant
             *self.words.get_unchecked(idx_of)
         };
         (word, 1 << idx_in)
     }
-    fn word_and_mask_mut(&mut self, bit_index: Index) -> (&mut usize, usize) {
-        let SplitIndex { idx_of, idx_in } = bit_index.split();
+    fn word_and_mask_mut(&mut self, bit_index: BitIndex) -> (&mut usize, usize) {
+        let SplitBitIndex { idx_of, idx_in } = bit_index.split();
         let word = unsafe {
             // safe! relies on invariant
             self.words.get_unchecked_mut(idx_of)
@@ -99,17 +99,17 @@ impl BitSet {
         me.set_all(true);
         me
     }
-    pub fn contains(&self, bit_index: Index) -> bool {
+    pub fn contains(&self, bit_index: BitIndex) -> bool {
         let (word, mask) = self.word_and_mask(bit_index);
         word & mask != 0
     }
-    pub fn insert(&mut self, bit_index: Index) -> bool {
+    pub fn insert(&mut self, bit_index: BitIndex) -> bool {
         let (word, mask) = self.word_and_mask_mut(bit_index);
         let was = *word;
         *word |= mask;
         was != *word
     }
-    pub fn remove(&mut self, bit_index: Index) -> bool {
+    pub fn remove(&mut self, bit_index: BitIndex) -> bool {
         let (word, mask) = self.word_and_mask_mut(bit_index);
         let was = *word;
         *word &= !mask;
@@ -141,7 +141,7 @@ impl BitSet {
     }
 }
 impl Iterator for BitSetIter<'_> {
-    type Item = Index;
+    type Item = BitIndex;
     fn next(&mut self) -> Option<Self::Item> {
         while self.cached_word == 0 && self.next_idx_of < BitSet::WORDS {
             // try fill the cached word
@@ -151,7 +151,7 @@ impl Iterator for BitSetIter<'_> {
         if self.cached_word == 0 {
             None
         } else {
-            let split_bit_index = SplitIndex {
+            let split_bit_index = SplitBitIndex {
                 idx_of: self.next_idx_of as usize - 1,
                 idx_in: self.cached_word.trailing_zeros() as usize, // certainly < Self::WORD_SIZE
             };

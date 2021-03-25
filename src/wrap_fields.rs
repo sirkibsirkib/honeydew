@@ -7,7 +7,7 @@ use core::ops::{
 pub struct WrapInt(i16);
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct WrapVec2([WrapInt; 2]);
+pub struct WrapVec2(Arr2Map<Dim, WrapInt>);
 
 ///////////////////////////////////////
 // Associated consts
@@ -174,13 +174,13 @@ impl WrapVec2 {
     // }
 }
 
-impl<T> From<[T; 2]> for WrapVec2
+impl<T: Copy> From<[T; 2]> for WrapVec2
 where
     WrapInt: From<T>,
 {
     #[inline(always)]
-    fn from([x, y]: [T; 2]) -> Self {
-        Self([From::from(x), From::from(y)])
+    fn from(arr: [T; 2]) -> Self {
+        Self(Arr2Map::new(arr))
     }
 }
 impl<T> Into<[T; 2]> for WrapVec2
@@ -189,8 +189,7 @@ where
 {
     #[inline(always)]
     fn into(self) -> [T; 2] {
-        let Self([x, y]) = self;
-        [x.into(), y.into()]
+        [self[X].into(), self[Y].into()]
     }
 }
 
@@ -198,13 +197,13 @@ impl Index<Dim> for WrapVec2 {
     type Output = WrapInt;
     #[inline(always)]
     fn index(&self, dim: Dim) -> &WrapInt {
-        &self.0[dim.vec_index()]
+        &self.0[dim]
     }
 }
 impl IndexMut<Dim> for WrapVec2 {
     #[inline(always)]
     fn index_mut(&mut self, dim: Dim) -> &mut WrapInt {
-        &mut self.0[dim.vec_index()]
+        &mut self.0[dim]
     }
 }
 

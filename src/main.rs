@@ -4,7 +4,7 @@ mod bit_set;
 mod game;
 mod prelude;
 mod rng;
-mod wrap_fields;
+// mod wrap_fields;
 
 use {
     crate::{
@@ -58,5 +58,35 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 
 fn main() {
     // println!("{:?}", crate::game::room::CELL_SIZE);
+    // use point::*;
+    // let mut pt = Point::ZERO;
+    // for _ in 0..10 {
+    //     pt[X] += 1;
+    //     println!("{:?}", pt);
+    //     pt = -pt;
+    //     println!("{:?}", pt);
+    // }
+    // for i in 0..5 {
+    //     for j in 0..5 {
+    //         let a = i as f32;
+    //         let b = j as f32;
+    //         let ans = modulo_difference([a, b], 5.);
+    //         println!(
+    //             "{:?}\t({} + {}) % 5. == {}\t{}",
+    //             [a, b],
+    //             b,
+    //             ans,
+    //             a,
+    //             if ans.is_nan() {
+    //                 "NAN"
+    //             } else if (b + ans) % 5. == a {
+    //                 "YES"
+    //             } else {
+    //                 "NO"
+    //             }
+    //         );
+    //     }
+    // }
+    // return;
     gfx_2020::main_loop::<gfx_backend_vulkan::Backend, _, _>(&render_config(), game_state_init_fn);
 }

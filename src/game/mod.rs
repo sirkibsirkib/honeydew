@@ -2,23 +2,24 @@ pub mod rendering;
 pub mod room;
 
 use {
-    crate::{bit_set::INDICES, prelude::*, rng::Rng, wrap_fields::WrapVec2},
+    crate::{bit_set::INDICES, prelude::*, rng::Rng},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
     room::{Coord, Room, ROOM_DIMS},
 };
 
-pub const PLAYER_SIZE: Vec2 = Vec2 { x: 0.5, y: 0.5 };
-pub const TELEPORTER_SIZE: Vec2 = Vec2 { x: 0.3, y: 0.3 };
-pub const UP_WALL_SIZE: Vec2 = Vec2 { x: 1.0, y: 0.16 };
+pub const PLAYER_SIZE: DimMap<f32> = DimMap { arr: [0.5; 2] };
+pub const TELEPORTER_SIZE: DimMap<f32> = DimMap { arr: [0.3; 2] };
+pub const UP_WALL_SIZE: DimMap<f32> = DimMap { arr: [1.0, 0.16] };
 
 // allows an upper bound for renderer's instance buffers
 pub const MAX_TELEPORTERS: u32 = INDICES as u32 / 64;
 pub const MAX_PLAYERS: u32 = 32;
 pub const MAX_WALLS: u32 = INDICES as u32 * 2;
 /////////////////////////////////
+
 struct Rect {
-    center: Vec2,
-    size: Vec2,
+    center: DimMap<f32>,
+    size: DimMap<f32>,
 }
 pub enum Net {
     Server { rng: Rng },
@@ -38,74 +39,94 @@ pub struct GameState {
 pub struct World {
     pub room: Room,
     pub players: Vec<Player>,
-    pub teleporters: Vec<WrapVec2>,
+    pub teleporters: Vec<DimMap<f32>>,
 }
 
 #[derive(Debug)]
 pub struct Player {
-    pub pos: WrapVec2,
-    pub vel: EnumMap<Dim, Option<Sign>>,
+    pub pos: DimMap<f32>,
+    pub vel: DimMap<Option<Sign>>,
 }
 #[derive(Default, Debug)]
 pub struct PressingState {
-    map: EnumMap<Dim, AxisPressingState>,
+    map: DimMap<AxisPressingState>,
 }
 #[derive(Copy, Clone, Debug)]
 struct AxisPressingState {
-    map: EnumMap<Sign, ElementState>,
+    map: SignMap<ElementState>,
 }
-
 impl Default for AxisPressingState {
     fn default() -> Self {
-        Self {
-            map: enum_map::enum_map! {
-                Negative => ElementState::Released,
-                Positive => ElementState::Released,
-            },
+        AxisPressingState { map: SignMap { arr: [ElementState::Released; 2] } }
+    }
+}
+
+//////////////////////////
+
+impl Player {
+    fn try_dir_collide(&mut self, rect: &Rect, dir: Direction) -> bool {
+        if !rect.contains(self.pos) {
+            return false;
+        }
+        self.pos[dir.dim()] = rect.aligned_to_edge(-dir);
+        true
+    }
+    fn try_collide(&mut self, rect: &Rect) -> bool {
+        match [self.vel[X], self.vel[Y]] {
+            [None, None] => false,
+            [Some(sign), None] => self.try_dir_collide(rect, X.sign(sign)),
+            [None, Some(sign)] => self.try_dir_collide(rect, Y.sign(sign)),
+            [Some(x_sign), Some(y_sign)] => {
+                if !rect.contains(self.pos) {
+                    return false;
+                }
+                let new_x = rect.aligned_to_edge(X.sign(!x_sign));
+                let new_y = rect.aligned_to_edge(Y.sign(!y_sign));
+                println!("{:?} vs {:?}", [new_x, new_y], self.pos);
+                if modulo_distance([new_x, self.pos[X]], ROOM_DIMS[X] as f32)
+                    < modulo_distance([new_y, self.pos[Y]], ROOM_DIMS[Y] as f32)
+                {
+                    println!("X is less drastic");
+                    self.pos[X] = new_x;
+                } else {
+                    println!("Y is less drastic");
+                    self.pos[Y] = new_y;
+                }
+                true
+            }
         }
     }
 }
 impl Rect {
-    fn contains(&self, pt: Vec2) -> bool {
-        const GRACE_DISTANCE: f32 = 0.001;
-        Dim::iter_domain().map(Dim::vec_index).all(|idx| {
-            let pair = [pt[idx], self.center[idx]];
-            modulo_distance(pair, ROOM_DIMS[idx] as f32) < self.size[idx] - GRACE_DISTANCE
-        })
-    }
-    fn correct_point_collider(&self, pt: &mut Vec2) -> bool {
-        if !self.contains(*pt) {
-            return false;
+    fn aligned_to_edge(&self, dir: Direction) -> f32 {
+        println!("{:?}", dir);
+        let dim = dir.dim();
+        let raw = self.center[dim] + dir.sign() * self.size[dim];
+        let bound = ROOM_DIMS[dim] as f32;
+        if raw < 0. {
+            raw + bound
+        } else if raw >= bound {
+            raw - bound
+        } else {
+            raw
         }
-        let (idx, correction) = Dim::iter_domain()
-            .map(|dim| {
-                let idx = dim.vec_index();
-                let correct_up = modulo_difference(
-                    [self.center[idx] - self.size[idx] + ROOM_DIMS[idx] as f32, pt[idx]],
-                    ROOM_DIMS[idx] as f32,
-                );
-                let correct_down = modulo_difference(
-                    [self.center[idx] + self.size[idx], pt[idx]],
-                    ROOM_DIMS[idx] as f32,
-                );
-                let min_correction =
-                    if correct_up.abs() < correct_down.abs() { correct_up } else { correct_down };
-                (idx, min_correction)
-            })
-            .min_by_key(|(_, correction)| OrderedFloat(correction.abs()))
-            .unwrap();
-        pt[idx] = (pt[idx] + correction + ROOM_DIMS[idx] as f32) % ROOM_DIMS[idx] as f32;
-        true
+    }
+    fn contains(&self, pt: DimMap<f32>) -> bool {
+        const GRACE_DISTANCE: f32 = 0.01;
+        Dim::iter_domain().all(|dim| {
+            let pair = [pt[dim], self.center[dim]];
+            modulo_distance(pair, ROOM_DIMS[dim] as f32) < self.size[dim] - GRACE_DISTANCE
+        })
     }
 }
 impl World {
-    pub fn random_free_space(&self, rng: &mut Rng) -> Vec2 {
-        const MIN_DIST: u32 = CELL_SIZE[X];
+    pub fn random_free_space(&self, rng: &mut Rng) -> DimMap<f32> {
+        const MIN_DIST: f32 = 2.0;
         loop {
             let new = Coord::random(rng).into_vec2_center();
             let mut pos_iter =
                 self.teleporters.iter().copied().chain(self.players.iter().map(|p| p.pos));
-            if pos_iter.all(|pos| pos.distance_squared(new) >= MIN_DIST) {
+            if pos_iter.all(|pos| pos.distance_squared(new) >= MIN_DIST * MIN_DIST) {
                 return new;
             }
         }
@@ -116,14 +137,14 @@ impl World {
             // println!("{:?}", player.pos);
             for dim in Dim::iter_domain() {
                 if let Some(sign) = player.vel[dim] {
-                    player.pos[dim.vec_index()] += sign * 0.05;
+                    player.pos[dim] += sign * 0.05;
                 }
             }
         }
 
         // correct player positions wrt. player<->player collisions
         for [a, b] in iter_pairs_mut(&mut self.players) {
-            Rect { center: b.pos, size: PLAYER_SIZE }.correct_point_collider(&mut a.pos);
+            a.try_collide(&Rect { center: b.pos, size: PLAYER_SIZE });
         }
 
         // teleporter <-> colliders
@@ -158,7 +179,7 @@ impl World {
                             center: GameState::wall_pos(check_at, dim),
                             size: GameState::wall_min_dists(dim),
                         };
-                        let collided = rect.correct_point_collider(&mut player.pos);
+                        let collided = player.try_collide(&rect);
                         if collided {
                             println!("COLLIDED");
                         }
@@ -170,9 +191,9 @@ impl World {
                         false
                     };
 
-                    let mut size = Vec2::from([0.2; 2]);
+                    let mut size = DimMap { arr: [0.2; 2] };
                     if collided {
-                        size[dim.vec_index()] = 0.6;
+                        size[dim] = 0.6;
                     }
                     renderer.write_vertex_buffer(
                         1 + i as u32 + if let X = dim { 4 } else { 0 },
@@ -187,11 +208,12 @@ impl World {
     }
 }
 impl GameState {
-    pub fn wrap_pos(pos: &mut Vec2) {
-        const BOUND: Vec2 = Vec2 { x: ROOM_DIMS[0] as f32, y: ROOM_DIMS[1] as f32 };
-        for idx in Dim::iter_domain().map(Dim::vec_index) {
-            let value = &mut pos[idx];
-            let bound = BOUND[idx];
+    pub fn wrap_pos(pos: &mut DimMap<f32>) {
+        const BOUND: DimMap<f32> =
+            DimMap { arr: [ROOM_DIMS.arr[0] as f32, ROOM_DIMS.arr[1] as f32] };
+        for dim in Dim::iter_domain() {
+            let value = &mut pos[dim];
+            let bound = BOUND[dim];
             if *value < 0. {
                 *value += bound;
             } else if bound < *value {
@@ -199,19 +221,19 @@ impl GameState {
             }
         }
     }
-    fn wall_min_dists(dim: Dim) -> Vec2 {
+    fn wall_min_dists(dim: Dim) -> DimMap<f32> {
         (Self::wall_size(dim) + PLAYER_SIZE) * 0.5
     }
-    pub fn wall_size(dim: Dim) -> Vec2 {
+    pub fn wall_size(dim: Dim) -> DimMap<f32> {
         match dim {
             X => UP_WALL_SIZE,
             Y => UP_WALL_SIZE.yx(),
         }
     }
-    pub fn wall_pos(coord: Coord, dim: Dim) -> Vec2 {
+    pub fn wall_pos(coord: Coord, dim: Dim) -> DimMap<f32> {
         // e.g. Hdimzontal wall at Coord[0,0] has pos [0.5, 0.0]
         let mut pos = coord.into_vec2_corner();
-        pos[dim.vec_index()] += 0.5;
+        pos[dim] += 0.5;
         pos
     }
     fn update_move_key(&mut self, dir: Direction, state: ElementState) {

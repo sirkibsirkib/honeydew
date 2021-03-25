@@ -2,31 +2,31 @@
 
 use {
     crate::{
-        bit_set::{self, BitSet, Index},
+        bit_set::{self, BitIndex, BitSet},
         prelude::*,
         rng::Rng,
-        wrap_fields::WrapVec2,
         Dim,
     },
     core::ops::Neg,
 };
-pub const ROOM_DIMS: [u8; 2] = [8; 2]; // for best results: keep elements power of two
-pub const CELL_SIZE: [u16; 2] = [u16_nth(ROOM_DIMS[0] as u16), u16_nth(ROOM_DIMS[1] as u16)];
+
+pub const ROOM_DIMS: DimMap<u8> = DimMap { arr: [1 << 3; 2] };
+pub const CELL_SIZE: DimMap<u16> =
+    DimMap { arr: [u16_nth(ROOM_DIMS.arr[0] as u16), u16_nth(ROOM_DIMS.arr[1] as u16)] };
 
 ///////////////////////////////////////////////
 // # Data types
 
 pub struct Room {
     pub teleporters: BitSet,
-    pub wall_sets: EnumMap<Dim, BitSet>,
+    pub wall_sets: DimMap<BitSet>,
 }
-#[derive(Hash, Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Default, Hash, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
-    x: u8, // invariant: < W
-    y: u8, // invariant: < H
+    map: DimMap<u8>,
 }
 struct IncompleteRoom {
-    wall_sets: EnumMap<Dim, BitSet>,
+    wall_sets: DimMap<BitSet>,
     visited: BitSet,
 }
 struct CrossesWallInfo {
@@ -91,15 +91,12 @@ impl IncompleteRoom {
 
 impl Room {
     pub fn wall_count(&self) -> u32 {
-        self.wall_sets.values().map(|bitset| bitset.len() as u32).sum()
+        self.wall_sets.arr.iter().map(|bitset| bitset.len() as u32).sum()
     }
     pub fn new(rng: &mut Rng) -> Self {
         let mut incomplete_room = IncompleteRoom {
             visited: Default::default(),
-            wall_sets: enum_map::enum_map! {
-                X => BitSet::full(),
-                Y =>  BitSet::full(),
-            },
+            wall_sets: DimMap { arr: [BitSet::full(), BitSet::full()] },
         };
 
         let mut at = Coord::random(rng);
@@ -123,7 +120,7 @@ impl Room {
         Room {
             wall_sets: incomplete_room.wall_sets,
             teleporters: (0..bit_set::INDICES / 16)
-                .map(move |_| Into::<Index>::into(Coord::random(rng)))
+                .map(move |_| Into::<BitIndex>::into(Coord::random(rng)))
                 .collect(),
         }
     }
@@ -150,19 +147,20 @@ impl Room {
     }
 }
 
-impl Into<Coord> for Index {
+impl Into<Coord> for BitIndex {
     fn into(self) -> Coord {
-        Coord { x: (self.0 % ROOM_DIMS[0] as u16) as u8, y: (self.0 / ROOM_DIMS[1] as u16) as u8 }
+        let arr = [(self.0 % ROOM_DIMS[X] as u16) as u8, (self.0 / ROOM_DIMS[Y] as u16) as u8];
+        Coord { map: DimMap { arr } }
     }
 }
 
 impl Coord {
     pub fn check_for_collisions_at(
         wall_dim: Dim,
-        mut v: Vec2,
+        mut v: DimMap<f32>,
     ) -> impl Iterator<Item = Self> + Clone {
         let tl = {
-            v[(!wall_dim).vec_index()] += 0.5;
+            v[!wall_dim] += 0.5;
             Self::from_vec2_floored(v)
         };
         let dims = match wall_dim {
@@ -170,20 +168,15 @@ impl Coord {
             Y => [2, 3],
         };
         (0..dims[0]).flat_map(move |x| {
-            (0..dims[1])
-                .map(move |y| Self::new([(tl.x + x).wrapping_sub(1), (tl.y + y).wrapping_sub(1)]))
+            (0..dims[1]).map(move |y| {
+                Self::new([(tl.map[X] + x).wrapping_sub(1), (tl.map[Y] + y).wrapping_sub(1)])
+            })
         })
-    }
-    pub fn part(self, dim: Dim) -> u8 {
-        match dim {
-            X => self.x,
-            Y => self.y,
-        }
     }
     pub fn manhattan_distance(self, rhs: Self) -> u16 {
         Dim::iter_domain()
             .map(|dim| {
-                let [a, b] = [self.part(dim), rhs.part(dim)];
+                let [a, b] = [self.map[dim], rhs.map[dim]];
                 a.wrapping_sub(b).min(b.wrapping_sub(a)) as u16
             })
             .sum()
@@ -191,53 +184,69 @@ impl Coord {
     pub fn wall_if_stepped(mut self, dir: Direction) -> Coord {
         match dir.sign() {
             Negative => {}
-            Positive => match dir.dim() {
-                X => self.x = (self.x + 1) % ROOM_DIMS[0],
-                Y => self.y = (self.y + 1) % ROOM_DIMS[1],
-            },
+            Positive => {
+                let dim = dir.dim();
+                if self.map[dim] == ROOM_DIMS[dim] {
+                    self.map[dim] = 0;
+                } else {
+                    self.map[dim] += 1;
+                }
+            }
         }
         self
     }
     pub fn random(rng: &mut Rng) -> Self {
-        Index::random(rng).into()
+        BitIndex::random(rng).into()
     }
-    pub const fn new([mut x, mut y]: [u8; 2]) -> Self {
-        x %= ROOM_DIMS[0];
-        y %= ROOM_DIMS[1];
-        Self { x, y }
+    pub fn new([x, y]: [u8; 2]) -> Self {
+        let mut me = Self::default();
+        me.map[X] = x % ROOM_DIMS[X];
+        me.map[Y] = y % ROOM_DIMS[Y];
+        me
     }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
-        Index::iter_domain().map(Into::into)
+        BitIndex::iter_domain().map(Into::into)
     }
     pub fn iter_domain_lexicographic(
     ) -> impl Iterator<Item = impl Iterator<Item = Self> + Clone> + Clone {
-        (0..ROOM_DIMS[1]).map(|y| (0..ROOM_DIMS[0]).map(move |x| Coord { x, y }))
+        (0..ROOM_DIMS[Y]).map(|y| (0..ROOM_DIMS[X]).map(move |x| Coord::new([x, y])))
     }
-    pub const fn stepped(self, dir: Direction) -> Self {
-        let Self { x, y } = self;
-        Self::new(match dir {
-            Up => [x, y.wrapping_sub(1)],
-            Down => [x, y + 1],
-            Left => [x.wrapping_sub(1), y],
-            Right => [x + 1, y],
-        })
+    pub fn stepped(mut self, dir: Direction) -> Self {
+        let dim = dir.dim();
+        self.map[dim] = match dir.sign() {
+            Positive => {
+                if self.map[dim] == ROOM_DIMS[dim] {
+                    0
+                } else {
+                    self.map[dim] + 1
+                }
+            }
+            Negative => {
+                if self.map[dim] == 0 {
+                    ROOM_DIMS[dim] - 1
+                } else {
+                    self.map[dim] - 1
+                }
+            }
+        };
+        self
     }
-    pub fn from_vec2_rounded(v: Vec2) -> Self {
-        Self::from_vec2_floored(v + Vec2::from([0.5; 2]))
+    pub fn from_vec2_rounded(v: DimMap<f32>) -> Self {
+        Self::from_vec2_floored(v + DimMap { arr: [0.5; 2] })
     }
-    pub fn from_vec2_floored(v: Vec2) -> Self {
-        Self::new([v.x as u8, v.y as u8])
+    pub fn from_vec2_floored(v: DimMap<f32>) -> Self {
+        Self::new([v[X] as u8, v[Y] as u8])
     }
-    pub fn into_vec2_center(self) -> Vec2 {
-        self.into_vec2_corner() + Vec2::from([0.5; 2])
+    pub fn into_vec2_center(self) -> DimMap<f32> {
+        self.into_vec2_corner() + DimMap { arr: [0.5; 2] }
     }
-    pub fn into_vec2_corner(self) -> Vec2 {
-        Vec2::from([self.x as f32, self.y as f32])
+    pub fn into_vec2_corner(self) -> DimMap<f32> {
+        self.map.map(|&c| c as f32)
     }
 }
 
-impl Into<Index> for Coord {
-    fn into(self) -> Index {
-        Index(self.y as u16 * ROOM_DIMS[0] as u16 + self.x as u16)
+impl Into<BitIndex> for Coord {
+    fn into(self) -> BitIndex {
+        BitIndex(self.map[Y] as u16 * ROOM_DIMS[X] as u16 + self.map[X] as u16)
     }
 }

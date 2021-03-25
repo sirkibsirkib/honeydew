@@ -75,21 +75,23 @@ impl GameState {
         const SCALE: f32 = 1. / 16.;
         const SCALE_XY: Vec2 = Vec2 { x: SCALE, y: SCALE };
         let translations = {
-            const W: f32 = ROOM_DIMS[0] as f32;
-            const H: f32 = ROOM_DIMS[1] as f32;
+            const WH: DimMap<f32> =
+                DimMap { arr: [ROOM_DIMS.arr[0] as f32, ROOM_DIMS.arr[1] as f32] };
             let mut base = self.world.players[self.controlling].pos;
             // by default, we view the TOPLEFT copy!
             if WRAP_DRAW {
-                if base[0] < W * 0.5 {
-                    // shift to RIGHT view
-                    base[0] += W;
-                }
-                if base[1] < H * 0.5 {
-                    // shift to BOTTOM view
-                    base[1] += H;
+                for dim in Dim::iter_domain() {
+                    if base[dim] < WH[dim] * 0.5 {
+                        base[dim] += WH[dim];
+                    }
                 }
             }
-            [-base, Vec2::new(W, 0.) - base, Vec2::new(0., H) - base, Vec2::new(W, H) - base]
+            [
+                -base,
+                DimMap { arr: [WH[X], 0.] } - base,
+                DimMap { arr: [0., WH[Y]] } - base,
+                WH - base,
+            ]
         };
         for (draw_info, translation) in self.draw_infos.iter_mut().zip(translations.iter()) {
             draw_info.view_transform = Mat4::from_scale(SCALE_XY.extend(1.))
