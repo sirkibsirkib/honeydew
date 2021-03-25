@@ -2,8 +2,9 @@
 mod basic;
 mod bit_set;
 mod game;
-mod point;
+// mod point;
 mod rng;
+mod wrap_fields;
 
 use {
     crate::{

@@ -63,12 +63,14 @@ pub enum Sign {
 
 /////////////////////////
 impl Sign {
+    #[inline(always)]
     pub fn iter_domain() -> impl Iterator<Item = Self> {
         [Positive, Negative].iter().copied()
     }
 }
 impl Mul<f32> for Sign {
     type Output = f32;
+    #[inline(always)]
     fn mul(self, rhs: f32) -> <Self as Mul<f32>>::Output {
         match self {
             Positive => rhs,
@@ -78,6 +80,7 @@ impl Mul<f32> for Sign {
 }
 impl Not for Dim {
     type Output = Self;
+    #[inline(always)]
     fn not(self) -> <Self as Not>::Output {
         match self {
             Y => X,
@@ -87,9 +90,11 @@ impl Not for Dim {
 }
 
 impl Dim {
+    #[inline(always)]
     pub fn sign(self, sign: Sign) -> Direction {
         Direction::new(self, sign)
     }
+    #[inline(always)]
     pub fn iter_domain() -> impl Iterator<Item = Self> {
         [X, Y].iter().copied()
     }
@@ -100,6 +105,7 @@ impl Dim {
             Y
         }
     }
+    #[inline(always)]
     pub const fn vec_index(self) -> usize {
         match self {
             X => 0,
@@ -109,6 +115,7 @@ impl Dim {
 }
 
 impl Direction {
+    #[inline(always)]
     pub const fn new(dim: Dim, sign: Sign) -> Self {
         match (dim, sign) {
             (X, Negative) => Left,
@@ -117,12 +124,14 @@ impl Direction {
             (Y, Positive) => Down,
         }
     }
+    #[inline(always)]
     pub const fn dim(self) -> Dim {
         match self {
             Up | Down => Y,
             Left | Right => X,
         }
     }
+    #[inline(always)]
     pub const fn sign(self) -> Sign {
         match self {
             Up | Left => Negative,
