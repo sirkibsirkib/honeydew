@@ -6,7 +6,7 @@ use {
     crate::{prelude::*, rng::Rng},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
     net::Net,
-    room::{Coord, Room, CELL_SIZE, TOT_CELLS},
+    room::{Coord, Room, CELL_SIZE, TOT_CELL_COUNT},
 };
 
 pub const PLAYER_SIZE: DimMap<u16> =
@@ -20,9 +20,9 @@ pub const LE_WALL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 8, CELL_SI
 pub const MOV_SPEED: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 16, CELL_SIZE.arr[1] / 16]);
 
 // allows an upper bound for renderer's instance buffers
-pub const NUM_TELEPORTERS: u32 = TOT_CELLS as u32 / 64;
+pub const NUM_TELEPORTERS: u32 = TOT_CELL_COUNT as u32 / 64;
 pub const NUM_PLAYERS: u32 = 3;
-pub const MAX_WALLS: u32 = TOT_CELLS as u32 * 2;
+pub const MAX_WALLS: u32 = TOT_CELL_COUNT as u32 * 2;
 
 pub type Pos = DimMap<WrapInt>;
 pub type Vel = DimMap<Option<Sign>>;
@@ -136,8 +136,7 @@ impl World {
     pub fn random_free_space(&self, rng: &mut Rng) -> Pos {
         pub const MIN_DIST: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] * 2, CELL_SIZE.arr[1] * 2]);
         loop {
-            let coord = Coord::random(rng);
-            let new = coord.into_vec2_center();
+            let new = Coord::random(rng).center_pos();
             let mut pos_iter =
                 self.teleporters.iter().copied().chain(self.players.iter().map(|p| p.pos));
             if pos_iter.all(move |pos| {
@@ -184,8 +183,8 @@ impl World {
         for player in &mut self.players {
             // correct position wrt. player<->wall collisions
             for dim in Dim::iter_domain() {
-                for check_at in Coord::check_for_collisions_at(dim, player.pos) {
-                    if self.room.wall_sets[dim].contains(check_at.into()) {
+                for check_at in Room::wall_cells_to_check_at(player.pos, dim) {
+                    if self.room.wall_sets[dim].contains(check_at.bit_index()) {
                         let rect = Rect {
                             center: GameState::wall_pos(check_at, dim),
                             size: GameState::wall_min_dists(dim),
@@ -209,7 +208,7 @@ impl GameState {
     }
     pub fn wall_pos(coord: Coord, dim: Dim) -> Pos {
         // e.g. X dim wall at Coord[0,0] has pos [0.5, 0.0]
-        let mut pos = coord.into_vec2_corner();
+        let mut pos = coord.corner_pos();
         pos[dim] += CELL_SIZE[dim] / 2;
         pos
     }

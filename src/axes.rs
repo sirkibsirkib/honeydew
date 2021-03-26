@@ -49,6 +49,12 @@ impl<T> DimMap<T> {
     pub const fn new(arr: [T; 2]) -> Self {
         Self { arr }
     }
+    pub const fn new_xy(x: T, y: T) -> Self {
+        Self { arr: [x, y] }
+    }
+    pub fn new_xy_with(mut func: impl FnMut(Dim) -> T) -> Self {
+        Self::new_xy(func(X), func(Y))
+    }
     pub fn map<N>(self, f: fn(T) -> N) -> DimMap<N> {
         let [zero, one] = self.arr;
         DimMap { arr: [f(zero), f(one)] }
@@ -158,6 +164,12 @@ impl Dim {
         }
     }
 }
+// impl<A, B> Into<DimMap<B>> for DimMap<A> {
+//     fn into(self) -> DimMap<B> {
+//         let Self { arr: [zero, one] } = self;
+//         Self::new([zero.into(), one.into()])
+//     }
+// }
 /////////////////////////
 
 impl<T: Neg<Output = T>> Mul<T> for Sign {

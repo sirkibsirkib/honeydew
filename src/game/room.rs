@@ -9,12 +9,12 @@ use {
 };
 
 pub const ROOM_SIZE: DimMap<u32> = DimMap::new([u16::MAX as u32 + 1; 2]);
-pub const CELLS: DimMap<u8> = DimMap::new([16, 16]);
-pub const TOT_CELLS: u16 = CELLS.arr[0] as u16 * CELLS.arr[1] as u16;
+pub const CELL_COUNTS: DimMap<u8> = DimMap::new([16, 16]);
+pub const TOT_CELL_COUNT: u16 = CELL_COUNTS.arr[0] as u16 * CELL_COUNTS.arr[1] as u16;
 
 pub const CELL_SIZE: DimMap<u16> = DimMap::new([
-    (ROOM_SIZE.arr[0] / CELLS.arr[0] as u32) as u16,
-    (ROOM_SIZE.arr[1] / CELLS.arr[1] as u32) as u16,
+    (ROOM_SIZE.arr[0] / CELL_COUNTS.arr[0] as u32) as u16,
+    (ROOM_SIZE.arr[1] / CELL_COUNTS.arr[1] as u32) as u16,
 ]);
 pub const HALF_CELL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 2, CELL_SIZE.arr[1] / 2]);
 
@@ -27,7 +27,8 @@ pub struct Room {
 }
 #[derive(Default, Hash, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
-    map: DimMap<u8>,
+    // invariant: top_left corner
+    pos: Pos,
 }
 struct IncompleteRoom {
     wall_sets: DimMap<BitSet>,
@@ -76,11 +77,11 @@ impl IncompleteRoom {
     }
     fn try_visit_in_direction(&mut self, src: Coord, dir: Direction) -> Option<Coord> {
         let dest = src.stepped(dir);
-        if self.visited.insert(dest.into()) {
+        if self.visited.insert(dest.bit_index()) {
             // successfully
             let cwi = dir.crosses_wall_info();
             let coord = if cwi.managed_by_src { src } else { dest };
-            self.wall_sets[cwi.dim].remove(coord.into());
+            self.wall_sets[cwi.dim].remove(coord.bit_index());
             Some(dest)
         } else {
             None
@@ -99,7 +100,7 @@ impl Room {
         };
 
         let mut at = Coord::random(rng);
-        incomplete_room.visited.insert(at.into());
+        incomplete_room.visited.insert(at.bit_index());
 
         let mut step_stack = Vec::<Direction>::with_capacity(3_000);
         loop {
@@ -114,77 +115,86 @@ impl Room {
             }
         }
         for _ in 0..(bit_set::INDICES / 4) {
-            incomplete_room.wall_sets[Dim::random(rng)].remove(Coord::random(rng).into());
+            incomplete_room.wall_sets[Dim::random(rng)].remove(BitIndex::random(rng));
         }
         Room {
             wall_sets: incomplete_room.wall_sets,
-            teleporters: (0..bit_set::INDICES / 16)
-                .map(move |_| Into::<BitIndex>::into(Coord::random(rng)))
-                .collect(),
+            teleporters: (0..bit_set::INDICES / 16).map(move |_| BitIndex::random(rng)).collect(),
         }
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Dim)> + '_ {
-        let dimmed_iter = move |o| self.wall_sets[o].iter().map(move |i| (i.into(), o));
+        let dimmed_iter =
+            move |o| self.wall_sets[o].iter().map(move |bi| (Coord::from_bit_index(bi), o));
         dimmed_iter(X).chain(dimmed_iter(Y))
+    }
+    pub fn wall_cells_to_check_at(
+        mut pos: Pos,
+        wall_dim: Dim,
+    ) -> impl Iterator<Item = Coord> + Clone {
+        std::array::IntoIter::new(match wall_dim {
+            X => {
+                // H walls! search grid 3 wide and 2 high
+                pos[Y] -= HALF_CELL_SIZE[Y];
+                let a = Coord::from_pos(pos);
+                let b = a.stepped(Down);
+                /*
+                [. a .]
+                [. b .]
+                */
+                [a.stepped(Left), a, a.stepped(Right), b.stepped(Left), b, b.stepped(Right)]
+            }
+            Y => {
+                // V walls! search grid 2 wide and 3 high
+                pos[X] -= HALF_CELL_SIZE[X];
+                let a = Coord::from_pos(pos);
+                let b = a.stepped(Right);
+                /*
+                [. .]
+                [a b]
+                [. .]
+                */
+                [a.stepped(Up), b.stepped(Up), a, b, a.stepped(Down), b.stepped(Down)]
+            }
+        })
     }
 }
 
 impl Coord {
-    pub fn check_for_collisions_at(
-        wall_dim: Dim,
-        mut v: Pos,
-    ) -> impl Iterator<Item = Self> + Clone {
-        let tl = {
-            v[!wall_dim] += CELL_SIZE[!wall_dim];
-            Self::from_vec2_floored(v)
-        };
-        let dims = match wall_dim {
-            X => [3, 2],
-            Y => [2, 3],
-        };
-        (0..dims[0]).flat_map(move |x| {
-            (0..dims[1]).map(move |y| {
-                Self::new([(tl.map[X] + x).wrapping_sub(1), (tl.map[Y] + y).wrapping_sub(1)])
-            })
-        })
+    #[inline]
+    pub fn stepped(mut self, dir: Direction) -> Self {
+        self.pos[dir.dim()] += dir.sign() * CELL_SIZE[dir.dim()] as i16;
+        self
     }
-    pub fn random(rng: &mut Rng) -> Self {
-        BitIndex::random(rng).into()
+    /////////////////////
+    pub fn corner_pos(self) -> Pos {
+        self.pos
     }
-    pub fn new([x, y]: [u8; 2]) -> Self {
-        let mut me = Self::default();
-        me.map[X] = x % CELLS[X];
-        me.map[Y] = y % CELLS[Y];
-        me
+    pub fn center_pos(self) -> Pos {
+        self.corner_pos() + HALF_CELL_SIZE.map(WrapInt::from)
     }
-    pub fn stepped(self, dir: Direction) -> Self {
-        let dim = dir.dim();
-        let mut vec2 = self.into_vec2_corner();
-        vec2[dim] += CELL_SIZE[dim];
-        Self::from_vec2_floored(vec2)
-    }
-    pub fn into_vec2_center(self) -> Pos {
-        self.into_vec2_corner() + HALF_CELL_SIZE.map(|value| WrapInt::from(value))
-    }
-    //
-    pub fn from_vec2_floored(pos: Pos) -> Self {
-        Self { map: pos.kv_map(|dim, &wi| (Into::<u16>::into(wi) / CELL_SIZE[dim]) as u8) }
-    }
-    pub fn into_vec2_corner(self) -> Pos {
-        self.map.kv_map(|dim, &value| WrapInt::from(value as u16 * CELL_SIZE[dim]))
-    }
-}
-
-impl Into<BitIndex> for Coord {
-    fn into(self) -> BitIndex {
-        BitIndex(self.map[Y] as u16 * CELLS[X] as u16 + self.map[X] as u16)
-    }
-}
-
-impl Into<Coord> for BitIndex {
-    fn into(self) -> Coord {
-        Coord {
-            map: DimMap::new([(self.0 % CELLS[Y] as u16) as u8, (self.0 / CELLS[X] as u16) as u8]),
+    pub fn from_pos(mut pos: Pos) -> Self {
+        // FLOOR
+        for dim in Dim::iter_domain() {
+            let val: u16 = pos[dim].into();
+            pos[dim] = (val / CELL_SIZE[dim] * CELL_SIZE[dim]).into();
         }
+        Self { pos }
+    }
+    //////////////////////
+    pub fn random(rng: &mut Rng) -> Self {
+        Self::from_bit_index(BitIndex::random(rng))
+    }
+    pub fn from_bit_index(bit_index: BitIndex) -> Self {
+        let x = bit_index.0 % CELL_COUNTS[X] as u16;
+        let y = bit_index.0 / CELL_COUNTS[X] as u16;
+        let x = WrapInt::from(x * CELL_SIZE[X]);
+        let y = WrapInt::from(y * CELL_SIZE[Y]);
+        Self { pos: Pos::new_xy(x, y) }
+    }
+    pub fn bit_index(self) -> BitIndex {
+        let f = move |dim| Into::<u16>::into(self.pos[dim]) / CELL_SIZE[dim];
+        let x = f(X);
+        let y = f(Y);
+        BitIndex(y * CELL_COUNTS[X] as u16 + x)
     }
 }

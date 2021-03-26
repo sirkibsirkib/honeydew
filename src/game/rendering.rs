@@ -1,9 +1,8 @@
-use crate::game::room::CELLS;
 use {
     crate::{
         game::{
-            GameState, MAX_WALLS, NUM_PLAYERS, NUM_TELEPORTERS, PLAYER_SIZE, TELEPORTER_SIZE,
-            UP_WALL_SIZE,
+            room::CELL_COUNTS, GameState, MAX_WALLS, NUM_PLAYERS, NUM_TELEPORTERS, PLAYER_SIZE,
+            TELEPORTER_SIZE, UP_WALL_SIZE,
         },
         prelude::*,
     },
@@ -75,8 +74,10 @@ impl GameState {
     }
     pub fn update_view_transforms(&mut self) {
         const ZOOM_OUT: f32 = 4.;
-        const SCALE_XY: Vec2 =
-            Vec2 { x: CELLS.arr[0] as f32 / ZOOM_OUT, y: CELLS.arr[1] as f32 / ZOOM_OUT };
+        const SCALE_XY: Vec2 = Vec2 {
+            x: CELL_COUNTS.arr[0] as f32 / ZOOM_OUT,
+            y: CELL_COUNTS.arr[1] as f32 / ZOOM_OUT,
+        };
         let translations = {
             let mut s = self.world.players[self.controlling].pos.to_screen2();
             // shift pos s.t. we focus on the replica closest to the center

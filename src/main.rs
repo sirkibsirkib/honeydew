@@ -29,6 +29,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
         controlling: 0,
     };
     state.init_vertex_buffers(renderer);
+    println!("INIT COMPLETE");
     Ok(Box::leak(Box::new(state)))
 }
 
