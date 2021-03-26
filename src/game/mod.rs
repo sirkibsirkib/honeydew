@@ -31,11 +31,17 @@ pub type Pos = DimMap<WrapInt>;
 pub type Vel = DimMap<Option<Sign>>;
 
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum PlayerColor {
     Black = 0,
     Blue = 1,
     Orange = 2,
+}
+#[derive(Debug, Copy, Clone)]
+pub enum PlayerRelation {
+    Predator,
+    Prey,
+    Identity,
 }
 
 struct Rect {
@@ -84,7 +90,36 @@ impl Into<usize> for PlayerColor {
         self as usize
     }
 }
-// pub fn iter_wrap_2_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> + '_ {
+impl PlayerColor {
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        std::array::IntoIter::new([Self::Black, Self::Blue, Self::Orange])
+    }
+    pub fn relation_to(self, other: Self) -> PlayerRelation {
+        if self == other {
+            PlayerRelation::Identity
+        } else if self == other.prey() {
+            PlayerRelation::Prey
+        } else {
+            PlayerRelation::Predator
+        }
+    }
+    pub fn related_by(self, rl: PlayerRelation) -> Self {
+        match rl {
+            PlayerRelation::Identity => self,
+            PlayerRelation::Prey => self.prey(),
+            PlayerRelation::Predator => self.prey().prey(),
+        }
+    }
+    #[inline]
+    pub fn prey(self) -> Self {
+        match self {
+            Self::Black => Self::Blue,
+            Self::Blue => Self::Orange,
+            Self::Orange => Self::Black,
+        }
+    }
+}
+// pub fn iter_windows_2_wrapping<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> + '_ {
 //     let len = slice.len();
 //     let start_ptr = slice.as_mut_ptr();
 //     let f = move |index| unsafe { &mut *start_ptr.add(index) };
@@ -183,11 +218,11 @@ impl World {
 
         if let Some(rng) = net.server_rng() {
             // player<->player
-            for i in 0..self.players.len() {
-                let j = (i + 1) % NUM_PLAYERS as usize;
-                let rect = Rect { center: self.players[j].pos, size: PLAYER_SIZE };
-                if rect.contains(self.players[i].pos) {
-                    self.players[j].pos = self.random_free_space(rng);
+            for predator in PlayerColor::iter_domain() {
+                let prey = predator.prey();
+                let rect = Rect { center: self.players[prey].pos, size: PLAYER_SIZE };
+                if rect.contains(self.players[predator].pos) {
+                    self.players[prey].pos = self.random_free_space(rng);
                 }
             }
 
