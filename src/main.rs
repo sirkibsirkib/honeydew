@@ -7,7 +7,7 @@ mod wrap_int;
 
 use {
     crate::{
-        game::{net::Net, rendering::render_config, GameState, World},
+        game::{net::Net, rendering::render_config, GameState, PlayerColor, World},
         prelude::*,
     },
     gfx_2020::{gfx_hal::Backend, *},
@@ -26,7 +26,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
         pressing_state: Default::default(),
         tex_id,
         draw_infos: GameState::init_draw_infos(),
-        controlling: 0,
+        controlling: PlayerColor::Black,
     };
     state.init_vertex_buffers(renderer);
     println!("INIT COMPLETE");

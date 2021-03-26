@@ -125,7 +125,7 @@ impl GameState {
         // teleporters
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_TELEPORTERS.start,
-            repeat(scissor_for_tile_at([0, 1])).take(self.world.teleporters.len()),
+            repeat(scissor_for_tile_at([1, 0])).take(self.world.teleporters.len()),
         );
         // players
         renderer.write_vertex_buffer(

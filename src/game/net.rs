@@ -1,16 +1,13 @@
-use crate::{
-    game::{Player, NUM_PLAYERS, NUM_TELEPORTERS},
-    prelude::*,
+use {
+    crate::{
+        game::{Player, PlayerColor, NUM_PLAYERS, NUM_TELEPORTERS},
+        prelude::*,
+    },
+    mio::Poll,
 };
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub enum ControllerIdx {
-    Zero,
-    One,
-    Two,
-}
-
 pub struct Net {
+    poll: Poll,
     io_buf: Vec<u8>,
     sc: NetSc,
 }
@@ -23,18 +20,19 @@ pub enum NetSc {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetMsg {
     CtsHello {
-        preferred_controller: ControllerIdx,
+        // preferred_controller: ControllerIdx, // TODO
     },
     CtsUpdate {
-        client_time: WrapInt,
         pos: Pos,
         vel: Vel,
+        client_time: WrapInt,
     },
     StCUpdate {
-        server_time: WrapInt,
         players: [Player; NUM_PLAYERS as usize],
         teleporters: [Pos; NUM_TELEPORTERS as usize],
+        server_time: WrapInt,
         room_seed: u16,
+        you_control: PlayerColor,
     },
 }
 
@@ -48,6 +46,10 @@ impl Net {
         }
     }
     pub fn new_server() -> Self {
-        Self { io_buf: Vec::with_capacity(1_024), sc: NetSc::Server { rng: Rng::new(None) } }
+        Self {
+            io_buf: Vec::with_capacity(1_024),
+            sc: NetSc::Server { rng: Rng::new(None) },
+            poll: Poll::new().unwrap(),
+        }
     }
 }

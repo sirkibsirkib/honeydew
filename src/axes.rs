@@ -3,6 +3,8 @@ use {
     core::ops::{Add, Div, Mul, Neg, Not, Sub},
 };
 ////////////////////////////////
+
+#[repr(u8)]
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum Direction {
     Up = 0,
@@ -11,16 +13,18 @@ pub enum Direction {
     Right = 3,
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Dim {
-    X = 0,
-    Y = 1,
+    X,
+    Y,
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Sign {
-    Positive = 0,
-    Negative = 1,
+    Positive,
+    Negative,
 }
 
 #[derive(Eq, PartialEq, Hash, Debug, Copy, Clone, Default, Serialize, Deserialize)]
@@ -150,26 +154,14 @@ impl<T> IndexMut<Sign> for SignMap<T> {
 
 impl Sign {
     const fn map_index(self) -> usize {
-        match self {
-            Positive => 0,
-            Negative => 1,
-        }
+        self as usize
     }
 }
 impl Dim {
     const fn map_index(self) -> usize {
-        match self {
-            X => 0,
-            Y => 1,
-        }
+        self as usize
     }
 }
-// impl<A, B> Into<DimMap<B>> for DimMap<A> {
-//     fn into(self) -> DimMap<B> {
-//         let Self { arr: [zero, one] } = self;
-//         Self::new([zero.into(), one.into()])
-//     }
-// }
 /////////////////////////
 
 impl<T: Neg<Output = T>> Mul<T> for Sign {

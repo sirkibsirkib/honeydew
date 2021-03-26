@@ -1,3 +1,4 @@
+pub mod config;
 pub mod net;
 pub mod rendering;
 pub mod room;
@@ -24,9 +25,18 @@ pub const NUM_TELEPORTERS: u32 = TOT_CELL_COUNT as u32 / 64;
 pub const NUM_PLAYERS: u32 = 3;
 pub const MAX_WALLS: u32 = TOT_CELL_COUNT as u32 * 2;
 
+/////////////////////////////////
+
 pub type Pos = DimMap<WrapInt>;
 pub type Vel = DimMap<Option<Sign>>;
-/////////////////////////////////
+
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum PlayerColor {
+    Black = 0,
+    Blue = 1,
+    Orange = 2,
+}
 
 struct Rect {
     center: Pos,
@@ -35,7 +45,7 @@ struct Rect {
 pub struct GameState {
     pub world: World,
     // controlling
-    pub controlling: usize,
+    pub controlling: PlayerColor,
     pub pressing_state: PressingState,
     // rendering
     pub tex_id: TexId,
@@ -69,13 +79,27 @@ impl Default for AxisPressingState {
 }
 
 //////////////////////////
-
-pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
-    let p = slice.as_mut_ptr();
-    (0..slice.len() - 1).flat_map(move |left| {
-        (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
-    })
+impl Into<usize> for PlayerColor {
+    fn into(self) -> usize {
+        self as usize
+    }
 }
+// pub fn iter_wrap_2_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> + '_ {
+//     let len = slice.len();
+//     let start_ptr = slice.as_mut_ptr();
+//     let f = move |index| unsafe { &mut *start_ptr.add(index) };
+//     (0..len - 1).map(move |left| [f(left), f(left + 1)]).chain(if len == 0 {
+//         None
+//     } else {
+//         Some([f(len - 1), f(0)])
+//     })
+// }
+// pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
+//     let p = slice.as_mut_ptr();
+//     (0..slice.len() - 1).flat_map(move |left| {
+//         (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
+//     })
+// }
 impl Player {
     fn try_dir_collide(&mut self, rect: &Rect, dir: Direction) -> bool {
         if !rect.contains(self.pos) {
@@ -157,13 +181,17 @@ impl World {
             }
         }
 
-        // correct player positions wrt. player<->player collisions
-        for [a, b] in iter_pairs_mut(&mut self.players) {
-            a.try_collide(&Rect { center: b.pos, size: PLAYER_SIZE });
-        }
-
         if let Some(rng) = net.server_rng() {
-            // teleport players
+            // player<->player
+            for i in 0..self.players.len() {
+                let j = (i + 1) % NUM_PLAYERS as usize;
+                let rect = Rect { center: self.players[j].pos, size: PLAYER_SIZE };
+                if rect.contains(self.players[i].pos) {
+                    self.players[j].pos = self.random_free_space(rng);
+                }
+            }
+
+            // player<->teleporter
             for i in 0..self.players.len() {
                 let player_pos = self.players[i].pos;
                 for j in 0..self.teleporters.len() {
@@ -277,5 +305,16 @@ impl AxisPressingState {
             [Pressed, Released] => Some(Negative),
             [Released, Pressed] => Some(Positive),
         }
+    }
+}
+impl Index<PlayerColor> for [Player; NUM_PLAYERS as usize] {
+    type Output = Player;
+    fn index(&self, idx: PlayerColor) -> &Player {
+        &self[Into::<usize>::into(idx)]
+    }
+}
+impl IndexMut<PlayerColor> for [Player; NUM_PLAYERS as usize] {
+    fn index_mut(&mut self, idx: PlayerColor) -> &mut Player {
+        &mut self[Into::<usize>::into(idx)]
     }
 }
