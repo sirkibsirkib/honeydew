@@ -18,7 +18,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     renderer: &mut Renderer<B>,
 ) -> ProceedWith<&'static mut GameState> {
     let config = Config {
-        preferred_player_color: PlayerColor::Black,
+        preferred_color: PlayerColor::Black,
         server_addr_if_client: "0.0.0.0:0".parse().unwrap(),
         server_addr_if_server: "0.0.0.0:0".parse().unwrap(),
         server_mode: true,

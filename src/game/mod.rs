@@ -266,7 +266,7 @@ impl GameState {
         maybe_seed: Option<u64>,
         config: &Config,
     ) -> Self {
-        let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
+        let texture = gfx_2020::load_texture_from_path("../src/data/faces.png").unwrap();
         let tex_id = renderer.load_texture(&texture);
         drop(texture);
         let state = GameState {
