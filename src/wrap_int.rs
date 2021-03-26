@@ -1,11 +1,9 @@
 use crate::prelude::*;
 use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct WrapInt(i16);
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct WrapVec2(DimMap<WrapInt>);
 ///////////////////////////////////////////
 impl WrapInt {
     pub fn distance_from_zero(self) -> u16 {

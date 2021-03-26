@@ -49,9 +49,9 @@ fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
 }
 
 impl GameState {
-    pub fn get_draw_args(&self) -> (TexId, &[DrawInfo]) {
+    pub fn get_draw_args(&self) -> (TexId, ClearColor, &[DrawInfo]) {
         let range = 0..if WRAP_DRAW { 4 } else { 1 };
-        (self.tex_id, &self.draw_infos[range])
+        (self.tex_id, ClearColor { float32: [0.5, 0.5, 0.5, 1.0] }, &self.draw_infos[range])
     }
     pub fn init_draw_infos() -> [DrawInfo; 4] {
         let new_draw_info = || DrawInfo {

@@ -11,3 +11,6 @@ fastrand = "1.4.0"
 gfx_2020 = { path="../gfx_2020" }
 gfx-backend-vulkan = "0.6.5"
 ordered-float = "2.1.1"
+bincode = "1.3.2"
+serde = { version = "1.0.63", features = ["derive"] }
+# mio = "0.7.11"

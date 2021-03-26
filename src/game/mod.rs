@@ -1,36 +1,36 @@
+pub mod net;
 pub mod rendering;
 pub mod room;
 
 use {
     crate::{prelude::*, rng::Rng},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
+    net::Net,
     room::{Coord, Room, CELL_SIZE, TOT_CELLS},
 };
 
 pub const PLAYER_SIZE: DimMap<u16> =
-    DimMap { arr: [CELL_SIZE.arr[0] / 9 * 5, CELL_SIZE.arr[1] / 9 * 5] };
+    DimMap::new([CELL_SIZE.arr[0] / 9 * 5, CELL_SIZE.arr[1] / 9 * 5]);
 
-pub const TELEPORTER_SIZE: DimMap<u16> =
-    DimMap { arr: [CELL_SIZE.arr[0] / 3, CELL_SIZE.arr[1] / 3] };
+pub const TELEPORTER_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 3, CELL_SIZE.arr[1] / 3]);
 
-pub const UP_WALL_SIZE: DimMap<u16> = DimMap { arr: [CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 8] };
-pub const LE_WALL_SIZE: DimMap<u16> = DimMap { arr: [CELL_SIZE.arr[0] / 8, CELL_SIZE.arr[1]] };
+pub const UP_WALL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 8]);
+pub const LE_WALL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 8, CELL_SIZE.arr[1]]);
 
-pub const MOV_SPEED: DimMap<u16> = DimMap { arr: [CELL_SIZE.arr[0] / 16, CELL_SIZE.arr[1] / 16] };
+pub const MOV_SPEED: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 16, CELL_SIZE.arr[1] / 16]);
 
 // allows an upper bound for renderer's instance buffers
 pub const NUM_TELEPORTERS: u32 = TOT_CELLS as u32 / 64;
 pub const NUM_PLAYERS: u32 = 3;
 pub const MAX_WALLS: u32 = TOT_CELLS as u32 * 2;
+
+pub type Pos = DimMap<WrapInt>;
+pub type Vel = DimMap<Option<Sign>>;
 /////////////////////////////////
 
 struct Rect {
-    center: DimMap<WrapInt>,
+    center: Pos,
     size: DimMap<u16>,
-}
-pub enum Net {
-    Server { rng: Rng },
-    Client {},
 }
 pub struct GameState {
     pub world: World,
@@ -46,13 +46,13 @@ pub struct GameState {
 pub struct World {
     pub room: Room,
     pub players: [Player; NUM_PLAYERS as usize],
-    pub teleporters: [DimMap<WrapInt>; NUM_TELEPORTERS as usize],
+    pub teleporters: [Pos; NUM_TELEPORTERS as usize],
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Player {
-    pub pos: DimMap<WrapInt>,
-    pub vel: DimMap<Option<Sign>>,
+    pub pos: Pos,
+    pub vel: Vel,
 }
 #[derive(Default, Debug)]
 pub struct PressingState {
@@ -64,12 +64,18 @@ struct AxisPressingState {
 }
 impl Default for AxisPressingState {
     fn default() -> Self {
-        AxisPressingState { map: SignMap { arr: [ElementState::Released; 2] } }
+        AxisPressingState { map: SignMap::new([ElementState::Released; 2]) }
     }
 }
 
 //////////////////////////
 
+pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
+    let p = slice.as_mut_ptr();
+    (0..slice.len() - 1).flat_map(move |left| {
+        (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
+    })
+}
 impl Player {
     fn try_dir_collide(&mut self, rect: &Rect, dir: Direction) -> bool {
         if !rect.contains(self.pos) {
@@ -106,7 +112,7 @@ impl Rect {
         let dim = dir.dim();
         self.center[dim] + dir.sign() * WrapInt::from(self.size[dim])
     }
-    fn contains(&self, pt: DimMap<WrapInt>) -> bool {
+    fn contains(&self, pt: Pos) -> bool {
         Dim::iter_domain()
             .all(|dim| (pt[dim] - self.center[dim]).distance_from_zero() < self.size[dim])
     }
@@ -127,9 +133,8 @@ impl World {
         }
         me
     }
-    pub fn random_free_space(&self, rng: &mut Rng) -> DimMap<WrapInt> {
-        pub const MIN_DIST: DimMap<u16> =
-            DimMap { arr: [CELL_SIZE.arr[0] * 2, CELL_SIZE.arr[1] * 2] };
+    pub fn random_free_space(&self, rng: &mut Rng) -> Pos {
+        pub const MIN_DIST: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] * 2, CELL_SIZE.arr[1] * 2]);
         loop {
             let coord = Coord::random(rng);
             let new = coord.into_vec2_center();
@@ -158,7 +163,7 @@ impl World {
             a.try_collide(&Rect { center: b.pos, size: PLAYER_SIZE });
         }
 
-        if let Net::Server { rng, .. } = net {
+        if let Some(rng) = net.server_rng() {
             // teleport players
             for i in 0..self.players.len() {
                 let player_pos = self.players[i].pos;
@@ -202,7 +207,7 @@ impl GameState {
             Y => LE_WALL_SIZE,
         }
     }
-    pub fn wall_pos(coord: Coord, dim: Dim) -> DimMap<WrapInt> {
+    pub fn wall_pos(coord: Coord, dim: Dim) -> Pos {
         // e.g. X dim wall at Coord[0,0] has pos [0.5, 0.0]
         let mut pos = coord.into_vec2_corner();
         pos[dim] += CELL_SIZE[dim] / 2;
@@ -216,7 +221,10 @@ impl GameState {
 }
 
 impl DrivesMainLoop for GameState {
-    fn render<B: Backend>(&mut self, _: &mut Renderer<B>) -> ProceedWith<(usize, &[DrawInfo])> {
+    fn render<B: Backend>(
+        &mut self,
+        _: &mut Renderer<B>,
+    ) -> ProceedWith<(usize, ClearColor, &[DrawInfo])> {
         Ok(self.get_draw_args())
     }
 

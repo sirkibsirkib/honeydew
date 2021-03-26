@@ -1,10 +1,9 @@
-use crate::game::room::ROOM_SIZE;
 use {
-    crate::{prelude::*, rng::Rng},
+    crate::{game::room::ROOM_SIZE, prelude::*, rng::Rng},
     core::ops::{Add, Div, Mul, Neg, Not, Sub},
 };
 ////////////////////////////////
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum Direction {
     Up = 0,
     Down = 1,
@@ -12,22 +11,29 @@ pub enum Direction {
     Right = 3,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Dim {
     X = 0,
     Y = 1,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Sign {
     Positive = 0,
     Negative = 1,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug, Copy, Clone, Default)]
+#[derive(Eq, PartialEq, Hash, Debug, Copy, Clone, Default, Serialize, Deserialize)]
 pub struct DimMap<T> {
     pub arr: [T; 2],
 }
+#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
+pub struct SignMap<T> {
+    pub arr: [T; 2],
+}
+
+/////////////////////////////////////
+
 impl DimMap<WrapInt> {
     pub fn to_screen2(self) -> Vec2 {
         self.map(Into::<u16>::into).to_screen2()
@@ -40,6 +46,9 @@ impl DimMap<u16> {
     }
 }
 impl<T> DimMap<T> {
+    pub const fn new(arr: [T; 2]) -> Self {
+        Self { arr }
+    }
     pub fn map<N>(self, f: fn(T) -> N) -> DimMap<N> {
         let [zero, one] = self.arr;
         DimMap { arr: [f(zero), f(one)] }
@@ -116,10 +125,10 @@ impl<T> IndexMut<Dim> for DimMap<T> {
         &mut self.arr[dim.map_index()]
     }
 }
-
-#[derive(Debug, Copy, Clone, Default)]
-pub struct SignMap<T> {
-    pub arr: [T; 2],
+impl<T> SignMap<T> {
+    pub const fn new(arr: [T; 2]) -> Self {
+        Self { arr }
+    }
 }
 impl<T> Index<Sign> for SignMap<T> {
     type Output = T;
@@ -149,14 +158,8 @@ impl Dim {
         }
     }
 }
-
-pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
-    let p = slice.as_mut_ptr();
-    (0..slice.len() - 1).flat_map(move |left| {
-        (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
-    })
-}
 /////////////////////////
+
 impl<T: Neg<Output = T>> Mul<T> for Sign {
     type Output = T;
     #[inline(always)]

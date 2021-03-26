@@ -27,7 +27,4 @@ impl Rng {
     pub fn gen_bool(&mut self) -> bool {
         self.gen_bits(1) != 0
     }
-    pub fn shuffle_slice<T>(&mut self, s: &mut [T]) {
-        self.fastrand_rng.shuffle(s)
-    }
 }

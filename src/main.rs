@@ -1,16 +1,14 @@
-////////////////////////////
-mod basic;
+mod axes;
 mod bit_set;
 mod game;
 mod prelude;
 mod rng;
-mod wrap_fields;
+mod wrap_int;
 
 use {
     crate::{
-        game::{rendering::render_config, GameState, Net, World},
+        game::{net::Net, rendering::render_config, GameState, World},
         prelude::*,
-        rng::Rng,
     },
     gfx_2020::{gfx_hal::Backend, *},
 };
@@ -23,7 +21,7 @@ pub(crate) fn game_state_init_fn<B: Backend>(
     let tex_id = renderer.load_texture(&texture);
     let maybe_seed = Some(1);
     let state = GameState {
-        net: Net::Server { rng: Rng::new(None) },
+        net: Net::new_server(),
         world: World::random(maybe_seed),
         pressing_state: Default::default(),
         tex_id,

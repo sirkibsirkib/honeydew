@@ -8,18 +8,15 @@ use {
     core::ops::Neg,
 };
 
-pub const ROOM_SIZE: DimMap<u32> = DimMap { arr: [u16::MAX as u32 + 1; 2] };
-pub const CELLS: DimMap<u8> = DimMap { arr: [8, 8] };
+pub const ROOM_SIZE: DimMap<u32> = DimMap::new([u16::MAX as u32 + 1; 2]);
+pub const CELLS: DimMap<u8> = DimMap::new([16, 16]);
 pub const TOT_CELLS: u16 = CELLS.arr[0] as u16 * CELLS.arr[1] as u16;
-pub const CELL_SIZE: DimMap<u16> = DimMap {
-    arr: [
-        (ROOM_SIZE.arr[0] / CELLS.arr[0] as u32) as u16,
-        (ROOM_SIZE.arr[1] / CELLS.arr[1] as u32) as u16,
-    ],
-};
 
-pub const HALF_CELL_SIZE: DimMap<u16> =
-    DimMap { arr: [CELL_SIZE.arr[0] / 2, CELL_SIZE.arr[1] / 2] };
+pub const CELL_SIZE: DimMap<u16> = DimMap::new([
+    (ROOM_SIZE.arr[0] / CELLS.arr[0] as u32) as u16,
+    (ROOM_SIZE.arr[1] / CELLS.arr[1] as u32) as u16,
+]);
+pub const HALF_CELL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 2, CELL_SIZE.arr[1] / 2]);
 
 ///////////////////////////////////////////////
 // # Data types
@@ -69,7 +66,7 @@ impl Neg for Direction {
 impl IncompleteRoom {
     fn try_visit_from(&mut self, rng: &mut Rng, src: Coord) -> Option<(Direction, Coord)> {
         let mut dirs = [Up, Down, Left, Right];
-        rng.shuffle_slice(&mut dirs);
+        rng.fastrand_rng.shuffle(&mut dirs);
         dirs.iter()
             .copied()
             .filter_map(move |dir| {
@@ -98,7 +95,7 @@ impl Room {
     pub fn new(rng: &mut Rng) -> Self {
         let mut incomplete_room = IncompleteRoom {
             visited: Default::default(),
-            wall_sets: DimMap { arr: [BitSet::full(), BitSet::full()] },
+            wall_sets: DimMap::new([BitSet::full(), BitSet::full()]),
         };
 
         let mut at = Coord::random(rng);
@@ -135,7 +132,7 @@ impl Room {
 impl Coord {
     pub fn check_for_collisions_at(
         wall_dim: Dim,
-        mut v: DimMap<WrapInt>,
+        mut v: Pos,
     ) -> impl Iterator<Item = Self> + Clone {
         let tl = {
             v[!wall_dim] += CELL_SIZE[!wall_dim];
@@ -166,14 +163,14 @@ impl Coord {
         vec2[dim] += CELL_SIZE[dim];
         Self::from_vec2_floored(vec2)
     }
-    pub fn into_vec2_center(self) -> DimMap<WrapInt> {
+    pub fn into_vec2_center(self) -> Pos {
         self.into_vec2_corner() + HALF_CELL_SIZE.map(|value| WrapInt::from(value))
     }
     //
-    pub fn from_vec2_floored(pos: DimMap<WrapInt>) -> Self {
+    pub fn from_vec2_floored(pos: Pos) -> Self {
         Self { map: pos.kv_map(|dim, &wi| (Into::<u16>::into(wi) / CELL_SIZE[dim]) as u8) }
     }
-    pub fn into_vec2_corner(self) -> DimMap<WrapInt> {
+    pub fn into_vec2_corner(self) -> Pos {
         self.map.kv_map(|dim, &value| WrapInt::from(value as u16 * CELL_SIZE[dim]))
     }
 }
@@ -186,7 +183,8 @@ impl Into<BitIndex> for Coord {
 
 impl Into<Coord> for BitIndex {
     fn into(self) -> Coord {
-        let arr = [(self.0 % CELLS[Y] as u16) as u8, (self.0 / CELLS[X] as u16) as u8];
-        Coord { map: DimMap { arr } }
+        Coord {
+            map: DimMap::new([(self.0 % CELLS[Y] as u16) as u8, (self.0 / CELLS[X] as u16) as u8]),
+        }
     }
 }
