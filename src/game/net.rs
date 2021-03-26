@@ -1,38 +1,23 @@
-use core::time::Duration;
 use {
     crate::{
         game::{config::Config, Player, PlayerColor, World, NUM_PLAYERS, NUM_TELEPORTERS},
         prelude::*,
     },
-    mio::{net::UdpSocket, Events, Interest, Poll, Token},
+    std::net::{SocketAddrV4, UdpSocket},
 };
-
-const TIMEOUT: Option<Duration> = Some(Duration::from_secs(0));
-const TOKEN_S_LISTENER: Token = Token(0);
-const TOKEN_S_PREDATOR: Token = Token(1);
-const TOKEN_S_PREY: Token = Token(2);
-
-const TOKEN_C_SERVER: Token = Token(0);
 
 /////////
 
 pub struct Net {
-    events: Events,
-    poll: Poll,
-    io_buf: Vec<u8>,
-    sc: NetSc,
+    udp: UdpSocket, // nonblocking. bound. connected IFF client.
+    io_buf: [u8; 2_048],
+    local_server: Option<NetServer>, // if None, I am the client
 }
 
-pub enum NetSc {
-    Server {
-        listener_udp: UdpSocket, // bound
-        rng: Rng,
-        client_prey: Option<UdpSocket>,     // connected, bound
-        client_predator: Option<UdpSocket>, // connected, bound
-    },
-    Client {
-        server_udp: UdpSocket, // bound, connected
-    },
+pub struct NetServer {
+    rng: Rng,
+    addr_prey: Option<SocketAddrV4>,     // connected, bound
+    addr_predator: Option<SocketAddrV4>, // connected, bound
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,65 +42,47 @@ pub enum NetMsg {
 //////////////
 impl Net {
     pub fn server_rng(&mut self) -> Option<&mut Rng> {
-        if let NetSc::Server { rng, .. } = &mut self.sc {
+        if let Some(NetServer { rng, .. }) = &mut self.local_server {
             Some(rng)
         } else {
             None
         }
     }
-    pub fn new_server(config: &Config) -> Self {
-        let mut listener_udp = UdpSocket::bind(config.server_ip_when_server.into())
-            .expect("Failed to bind to the given server ip!");
-        let poll = Poll::new().unwrap();
-        poll.registry()
-            .register(&mut listener_udp, TOKEN_S_LISTENER, Interest::READABLE | Interest::WRITABLE)
-            .expect("Failed to register server's listener socket!");
-        Self {
-            events: Events::with_capacity(16),
-            io_buf: Vec::with_capacity(1_024),
-            sc: NetSc::Server {
-                rng: Rng::new(None),
-                client_predator: None,
-                client_prey: None,
-                listener_udp,
-            },
-            poll,
-        }
+    fn new_server(config: &Config) -> NetServer {
+        NetServer { rng: Rng::new(None), addr_predator: None, addr_prey: None }
     }
-
-    fn try_recv_msg(buf: &mut Vec<u8>, sock: &mut UdpSocket) -> Option<NetMsg> {
-        buf.clear();
-        match sock.recv(buf) {
-            Err(_) | Ok(0) => None,
-            Ok(_) => bincode::deserialize(buf).ok(),
-        }
+    pub fn new(config: &Config) -> Self {
+        let udp =
+            UdpSocket::bind(config.server_addr_if_server).expect("Failed to bind to server addr");
+        udp.set_nonblocking(true).unwrap();
+        Self { udp, io_buf: [0; 2048], local_server: Some(Self::new_server(config)) }
     }
 
     pub fn update(&mut self, world: &mut World, controlling: PlayerColor) {
-        self.poll.poll(&mut self.events, TIMEOUT).unwrap();
-        match &mut self.sc {
-            NetSc::Server { listener_udp, client_prey, client_predator, .. } => {
-                for event in &self.events {
-                    match event.token() {
-                        TOKEN_S_LISTENER => {
-                            match Self::try_recv_msg(&mut self.io_buf, listener_udp) {
-                                None => {}
-                                Some(NetMsg::CtsHello { preferred_color }) => {}
-                                // Some(NetMsg::Cts)
-                                _ => todo!(),
-                            }
-                        }
-                        TOKEN_S_PREDATOR => todo!(),
-                        TOKEN_S_PREY => todo!(),
-                        _ => unreachable!(),
-                    }
-                }
-                // 1 accept new incoming connections
-                todo!() //
-            }
-            NetSc::Client { server_udp } => {
-                todo!()
-            }
-        }
+        //     self.poll.poll(&mut self.events, TIMEOUT).unwrap();
+        // match &mut self.sc {
+        //     NetSc::Server {  } => {
+        //             for event in &self.events {
+        //                 match event.token() {
+        //                     TOKEN_S_LISTENER => {
+        //                         match Self::try_recv_msg(&mut self.io_buf, listener_udp) {
+        //                             None => {}
+        //                             Some(NetMsg::CtsHello { preferred_color }) => {}
+        //                             // Some(NetMsg::Cts)
+        //                             _ => todo!(),
+        //                         }
+        //                     }
+        //                     TOKEN_S_PREDATOR => todo!(),
+        //                     TOKEN_S_PREY => todo!(),
+        //                     _ => unreachable!(),
+        //                 }
+        //             }
+        //             // 1 accept new incoming connections
+        //             todo!() //
+        //         }
+        //     NetSc::Client {  } => {
+        //         todo!()
+        //     }
+        // }
     }
 }

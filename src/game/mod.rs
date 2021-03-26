@@ -5,6 +5,7 @@ pub mod room;
 
 use {
     crate::{prelude::*, rng::Rng},
+    config::Config,
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
     net::Net,
     room::{Coord, Room, CELL_SIZE, TOT_CELL_COUNT},
@@ -260,6 +261,25 @@ impl World {
     }
 }
 impl GameState {
+    pub fn new<B: Backend>(
+        renderer: &mut Renderer<B>,
+        maybe_seed: Option<u64>,
+        config: &Config,
+    ) -> Self {
+        let texture = gfx_2020::load_texture_from_path("./src/data/faces.png").unwrap();
+        let tex_id = renderer.load_texture(&texture);
+        drop(texture);
+        let state = GameState {
+            net: Net::new(config),
+            world: World::random(maybe_seed),
+            pressing_state: Default::default(),
+            tex_id,
+            draw_infos: GameState::init_draw_infos(),
+            controlling: PlayerColor::Black,
+        };
+        state.init_vertex_buffers(renderer);
+        state
+    }
     fn wall_min_dists(dim: Dim) -> DimMap<u16> {
         (Self::wall_size(dim) + PLAYER_SIZE).map(|val| val / 2u16)
     }

@@ -4,6 +4,6 @@ use std::net::SocketAddrV4;
 pub struct Config {
     pub preferred_player_color: PlayerColor,
     pub server_mode: bool,
-    pub server_ip_when_server: SocketAddrV4,
-    pub server_ip_when_client: SocketAddrV4,
+    pub server_addr_if_server: SocketAddrV4,
+    pub server_addr_if_client: SocketAddrV4,
 }
