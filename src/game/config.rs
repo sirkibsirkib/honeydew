@@ -19,5 +19,6 @@ pub struct IfClient {
 #[derive(Serialize, Deserialize)]
 pub struct IfServer {
     pub server_addr: SocketAddrV4,
-    pub preferred_color: PlayerColor,
+    pub player_color: PlayerColor,
+    pub specified_seed: Option<u64>,
 }

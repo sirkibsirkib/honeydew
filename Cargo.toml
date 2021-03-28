@@ -13,4 +13,4 @@ gfx-backend-vulkan = "0.6.5"
 ordered-float = "2.1.1"
 bincode = "1.3.2"
 serde = { version = "1.0.63", features = ["derive"] }
-mio = {version="0.7.11", features = ["os-poll", "udp"] }
+# mio = {version="0.7.11", features = ["os-poll", "udp"] }

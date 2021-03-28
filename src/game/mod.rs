@@ -178,8 +178,8 @@ impl Rect {
     }
 }
 impl World {
-    pub fn random(maybe_seed: Option<u64>) -> Self {
-        let mut rng = Rng::new(maybe_seed);
+    pub fn new_seeded(seed: u64) -> Self {
+        let mut rng = Rng::new_seeded(seed);
         let mut me = Self {
             room: Room::new(&mut rng),
             players: Default::default(),
@@ -261,17 +261,13 @@ impl World {
     }
 }
 impl GameState {
-    pub fn new<B: Backend>(
-        renderer: &mut Renderer<B>,
-        maybe_seed: Option<u64>,
-        config: &Config,
-    ) -> Self {
+    pub fn new_seeded<B: Backend>(renderer: &mut Renderer<B>, seed: u64, config: &Config) -> Self {
         let texture = gfx_2020::load_texture_from_path("../src/data/faces.png").unwrap();
         let tex_id = renderer.load_texture(&texture);
         drop(texture);
         let state = GameState {
             net: Net::new(config),
-            world: World::random(maybe_seed),
+            world: World::new_seeded(seed),
             pressing_state: Default::default(),
             tex_id,
             draw_infos: GameState::init_draw_infos(),

@@ -83,3 +83,16 @@ where
         *self = *self - rhs;
     }
 }
+
+// TODO test
+impl PartialOrd for WrapInt {
+    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
+        let me_relative = *self - *rhs;
+        match me_relative.0 {
+            0 => Some(Ordering::Equal),
+            i16::MIN => None,
+            x if x < 0 => Some(Ordering::Less),
+            _otherwise => Some(Ordering::Greater),
+        }
+    }
+}

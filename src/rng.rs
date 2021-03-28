@@ -5,13 +5,11 @@ pub struct Rng {
 }
 
 impl Rng {
-    pub fn new(maybe_seed: Option<u64>) -> Self {
-        let fastrand_rng = if let Some(seed) = maybe_seed {
-            fastrand::Rng::with_seed(seed)
-        } else {
-            fastrand::Rng::new()
-        };
-        Self { fastrand_rng, cache: 0, cache_lsb_left: 0 }
+    pub fn new_unseeded() -> Self {
+        Self { fastrand_rng: fastrand::Rng::new(), cache: 0, cache_lsb_left: 0 }
+    }
+    pub fn new_seeded(seed: u64) -> Self {
+        Self { fastrand_rng: fastrand::Rng::with_seed(seed), cache: 0, cache_lsb_left: 0 }
     }
     pub fn gen_bits(&mut self, bits: u8) -> u32 {
         assert!(bits <= 32);
