@@ -41,5 +41,5 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 }
 
 fn main() {
-    gfx_2020::main_loop::<gfx_backend_vulkan::Backend, _, _>(&render_config(), game_state_init_fn);
+    gfx_2020::main_loop::<gfx_backend::Backend, _, _>(&render_config(), game_state_init_fn);
 }
