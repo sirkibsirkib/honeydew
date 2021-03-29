@@ -5,35 +5,34 @@ mod prelude;
 mod rng;
 mod wrap_int;
 
-use crate::game::config::IfClient;
-use crate::game::config::IfServer;
-use std::net::Ipv4Addr;
-use std::net::SocketAddrV4;
 use {
     crate::{
-        game::{config::Config, rendering::render_config, GameState, PlayerColor},
+        game::{config::Config, rendering::render_config, GameState},
         prelude::*,
     },
     gfx_2020::{gfx_hal::Backend, *},
+    std::path::Path,
 };
 /////////////////////////////////
 
 pub(crate) fn game_state_init_fn<B: Backend>(
     renderer: &mut Renderer<B>,
 ) -> ProceedWith<&'static mut GameState> {
-    let server_addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0);
-    let config = Config {
-        server_mode: true,
-        if_client: IfClient {
-            preferred_color: PlayerColor::Black,
-            connect_timeout: Duration::from_secs(3),
-            server_addr,
-        },
-        if_server: IfServer { specified_seed: None, player_color: PlayerColor::Black, server_addr },
-    };
-    // TODO
-    let seed = 1;
-    Ok(Box::leak(Box::new(GameState::new_seeded(renderer, seed, &config))))
+    let config_path = Path::new("./honeydew_config.ron");
+    let config = Config::try_load_from(config_path).unwrap_or_else(move || {
+        println!("No config found at {:?}. Generating default!", config_path.canonicalize());
+        let config = Config::default();
+        config.try_save_into(config_path);
+        config
+    });
+    {
+        let stdio = std::io::stdout();
+        let mut stdio = stdio.lock();
+        use std::io::Write;
+        writeln!(stdio, "Beginning game with config ").unwrap();
+        config.write_ron_into(stdio);
+    }
+    Ok(Box::leak(Box::new(GameState::new(renderer, &config))))
 }
 
 fn main() {

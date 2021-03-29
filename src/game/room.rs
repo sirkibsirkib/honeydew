@@ -11,7 +11,6 @@ use {
 pub const ROOM_SIZE: DimMap<u32> = DimMap::new([u16::MAX as u32 + 1; 2]);
 pub const CELL_COUNTS: DimMap<u8> = DimMap::new([16, 16]);
 pub const TOT_CELL_COUNT: u16 = CELL_COUNTS.arr[0] as u16 * CELL_COUNTS.arr[1] as u16;
-
 pub const CELL_SIZE: DimMap<u16> = DimMap::new([
     (ROOM_SIZE.arr[0] / CELL_COUNTS.arr[0] as u32) as u16,
     (ROOM_SIZE.arr[1] / CELL_COUNTS.arr[1] as u32) as u16,
@@ -22,7 +21,6 @@ pub const HALF_CELL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 2, CELL_
 // # Data types
 
 pub struct Room {
-    pub teleporters: BitSet,
     pub wall_sets: DimMap<BitSet>,
 }
 #[derive(Default, Hash, Debug, Copy, Clone, Eq, PartialEq)]
@@ -93,6 +91,11 @@ impl Room {
     pub fn wall_count(&self) -> u32 {
         self.wall_sets.arr.iter().map(|bitset| bitset.len() as u32).sum()
     }
+    pub fn new_seeded(seed: u64) -> (Self, Rng) {
+        let mut rng = Rng::new_seeded(seed);
+        let room = Self::new(&mut rng);
+        (room, rng)
+    }
     pub fn new(rng: &mut Rng) -> Self {
         let mut incomplete_room = IncompleteRoom {
             visited: Default::default(),
@@ -117,10 +120,7 @@ impl Room {
         for _ in 0..(bit_set::INDICES / 4) {
             incomplete_room.wall_sets[Dim::random(rng)].remove(BitIndex::random(rng));
         }
-        Room {
-            wall_sets: incomplete_room.wall_sets,
-            teleporters: (0..bit_set::INDICES / 16).map(move |_| BitIndex::random(rng)).collect(),
-        }
+        Room { wall_sets: incomplete_room.wall_sets }
     }
     pub fn iter_walls(&self) -> impl Iterator<Item = (Coord, Dim)> + '_ {
         let dimmed_iter =

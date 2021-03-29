@@ -12,13 +12,15 @@ use {
         DrawInfo, MaxBufferArgs, Renderer, RendererConfig, RendererInitConfig, TexId, TexScissor,
     },
 };
+
 pub const INSTANCE_RANGE_PLAYERS: Range<u32> = 0..NUM_PLAYERS;
 pub const INSTANCE_RANGE_TELEPORTERS: Range<u32> =
     range_concat(INSTANCE_RANGE_PLAYERS, NUM_TELEPORTERS);
 pub const INSTANCE_RANGE_WALLS: Range<u32> = range_concat(INSTANCE_RANGE_TELEPORTERS, MAX_WALLS);
 pub const MAX_INSTANCES: u32 = INSTANCE_RANGE_WALLS.end;
 
-pub const WRAP_DRAW: bool = true;
+// for debugging. true for release.
+pub const ENABLE_WRAP_DRAW: bool = true;
 
 /////////////////////////////////
 pub fn render_config() -> RendererConfig<'static> {
@@ -49,7 +51,7 @@ fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
 
 impl GameState {
     pub fn get_draw_args(&self) -> (TexId, ClearColor, &[DrawInfo]) {
-        let range = 0..if WRAP_DRAW { 4 } else { 1 };
+        let range = 0..if ENABLE_WRAP_DRAW { 4 } else { 1 };
         (self.tex_id, ClearColor { float32: [0.5, 0.5, 0.5, 1.0] }, &self.draw_infos[range])
     }
     pub fn init_draw_infos() -> [DrawInfo; 4] {
@@ -79,9 +81,9 @@ impl GameState {
             y: CELL_COUNTS.arr[1] as f32 / ZOOM_OUT,
         };
         let translations = {
-            let mut s = self.world.players[self.controlling].pos.to_screen2();
+            let mut s = self.world.entities.players[self.controlling].pos.to_screen2();
             // shift pos s.t. we focus on the replica closest to the center
-            if WRAP_DRAW {
+            if ENABLE_WRAP_DRAW {
                 for idx in 0..2 {
                     if s[idx] < 0.5 {
                         s[idx] += 1.;
@@ -107,14 +109,14 @@ impl GameState {
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
     fn update_player_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        let iter = self.world.players.iter().map(move |player| {
+        let iter = self.world.entities.players.iter().map(move |player| {
             Mat4::from_translation(player.pos.to_screen2().extend(0.))
                 * Mat4::from_scale(PLAYER_SIZE.to_screen2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_PLAYERS.start, iter);
     }
     fn update_teleporter_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        let iter = self.world.teleporters.iter().map(move |pos| {
+        let iter = self.world.entities.teleporters.iter().map(move |pos| {
             Mat4::from_translation(pos.to_screen2().extend(0.))
                 * Mat4::from_scale(TELEPORTER_SIZE.to_screen2().extend(1.))
         });
@@ -125,7 +127,7 @@ impl GameState {
         // teleporters
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_TELEPORTERS.start,
-            repeat(scissor_for_tile_at([1, 0])).take(self.world.teleporters.len()),
+            repeat(scissor_for_tile_at([1, 0])).take(self.world.entities.teleporters.len()),
         );
         // players
         renderer.write_vertex_buffer(

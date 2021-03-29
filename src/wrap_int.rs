@@ -1,5 +1,7 @@
-use crate::prelude::*;
-use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
+use {
+    crate::prelude::*,
+    core::ops::{Add, AddAssign, Neg, Sub, SubAssign},
+};
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct WrapInt(i16);

@@ -1,14 +1,10 @@
-use crate::game::room::TOT_CELL_COUNT;
-use {
-    crate::{prelude::*, rng::Rng},
-    core::iter::FromIterator,
-};
+use crate::prelude::*;
 
 /*
 This is an unfortunate case of coupling. What we REALLY want here
 is the use of constant generics, to make INDICES a type parameter.
 */
-pub const INDICES: u16 = TOT_CELL_COUNT;
+pub const INDICES: u16 = crate::game::room::TOT_CELL_COUNT;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct BitIndex(pub(crate) u16); // invariant: < INDICES
@@ -42,7 +38,7 @@ const fn div_round_up(x: u16, y: u16) -> u16 {
     (x + y - 1) / y
 }
 
-impl FromIterator<BitIndex> for BitSet {
+impl core::iter::FromIterator<BitIndex> for BitSet {
     fn from_iter<I: IntoIterator<Item = BitIndex>>(iter: I) -> Self {
         let mut bs = BitSet::default();
         for i in iter {

@@ -1,0 +1,12 @@
+(
+    server_mode: true,
+    if_client: (
+        server_addr: "0.0.0.0:0",
+        preferred_color: Black,
+    ),
+    if_server: (
+        server_addr: "0.0.0.0:0",
+        player_color: Blue,
+        room_seed: None,
+    ),
+)

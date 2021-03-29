@@ -20,4 +20,8 @@ pub use {
     gfx_2020::{glam::Vec2Swizzles, ClearColor, Mat4, Vec2, Vec3},
     ordered_float::OrderedFloat,
     serde::{Deserialize, Serialize},
+    std::array::IntoIter as ArrIter,
 };
+pub fn unspecified_sock_addr() -> std::net::SocketAddrV4 {
+    std::net::SocketAddrV4::new(std::net::Ipv4Addr::new(0, 0, 0, 0), 0)
+}

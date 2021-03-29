@@ -30,6 +30,7 @@ pub const MAX_WALLS: u32 = TOT_CELL_COUNT as u32 * 2;
 
 pub type Pos = DimMap<WrapInt>;
 pub type Vel = DimMap<Option<Sign>>;
+pub type PlayerArr<T> = [T; NUM_PLAYERS as usize];
 
 #[repr(u8)]
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
@@ -62,11 +63,16 @@ pub struct GameState {
 }
 pub struct World {
     pub room: Room,
-    pub players: [Player; NUM_PLAYERS as usize],
+    pub entities: Entities,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Entities {
+    pub players: PlayerArr<Player>,
     pub teleporters: [Pos; NUM_TELEPORTERS as usize],
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Player {
     pub pos: Pos,
     pub vel: Vel,
@@ -86,12 +92,17 @@ impl Default for AxisPressingState {
 }
 
 //////////////////////////
+
 impl Into<usize> for PlayerColor {
     fn into(self) -> usize {
         self as usize
     }
 }
 impl PlayerColor {
+    pub fn peers(self) -> [Self; 2] {
+        let prey = self.prey();
+        [prey.prey(), prey]
+    }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
         std::array::IntoIter::new([Self::Black, Self::Blue, Self::Orange])
     }
@@ -120,22 +131,6 @@ impl PlayerColor {
         }
     }
 }
-// pub fn iter_windows_2_wrapping<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> + '_ {
-//     let len = slice.len();
-//     let start_ptr = slice.as_mut_ptr();
-//     let f = move |index| unsafe { &mut *start_ptr.add(index) };
-//     (0..len - 1).map(move |left| [f(left), f(left + 1)]).chain(if len == 0 {
-//         None
-//     } else {
-//         Some([f(len - 1), f(0)])
-//     })
-// }
-// pub fn iter_pairs_mut<T>(slice: &mut [T]) -> impl Iterator<Item = [&mut T; 2]> {
-//     let p = slice.as_mut_ptr();
-//     (0..slice.len() - 1).flat_map(move |left| {
-//         (left + 1..slice.len()).map(move |right| unsafe { [&mut *p.add(left), &mut *p.add(right)] })
-//     })
-// }
 impl Player {
     fn try_dir_collide(&mut self, rect: &Rect, dir: Direction) -> bool {
         if !rect.contains(self.pos) {
@@ -177,19 +172,14 @@ impl Rect {
             .all(|dim| (pt[dim] - self.center[dim]).distance_from_zero() < self.size[dim])
     }
 }
-impl World {
-    pub fn new_seeded(seed: u64) -> Self {
-        let mut rng = Rng::new_seeded(seed);
-        let mut me = Self {
-            room: Room::new(&mut rng),
-            players: Default::default(),
-            teleporters: Default::default(),
-        };
+impl Entities {
+    pub fn random(rng: &mut Rng) -> Self {
+        let mut me = Self { players: Default::default(), teleporters: Default::default() };
         for i in 0..NUM_PLAYERS as usize {
-            me.players[i].pos = me.random_free_space(&mut rng);
+            me.players[i].pos = me.random_free_space(rng);
         }
         for i in 0..NUM_TELEPORTERS as usize {
-            me.teleporters[i] = me.random_free_space(&mut rng);
+            me.teleporters[i] = me.random_free_space(rng);
         }
         me
     }
@@ -207,9 +197,11 @@ impl World {
             }
         }
     }
+}
+impl World {
     fn move_and_collide(&mut self, net: &mut Net) {
         // update player positions wrt. movement
-        for player in &mut self.players {
+        for player in &mut self.entities.players {
             for dim in Dim::iter_domain() {
                 if let Some(sign) = player.vel[dim] {
                     player.pos[dim] += sign * WrapInt::from(MOV_SPEED[dim]);
@@ -221,30 +213,30 @@ impl World {
             // player<->player
             for predator in PlayerColor::iter_domain() {
                 let prey = predator.prey();
-                let rect = Rect { center: self.players[prey].pos, size: PLAYER_SIZE };
-                if rect.contains(self.players[predator].pos) {
-                    self.players[prey].pos = self.random_free_space(rng);
+                let rect = Rect { center: self.entities.players[prey].pos, size: PLAYER_SIZE };
+                if rect.contains(self.entities.players[predator].pos) {
+                    self.entities.players[prey].pos = self.entities.random_free_space(rng);
                 }
             }
 
             // player<->teleporter
-            for i in 0..self.players.len() {
-                let player_pos = self.players[i].pos;
-                for j in 0..self.teleporters.len() {
-                    let teleporter = self.teleporters[j];
+            for i in 0..self.entities.players.len() {
+                let player_pos = self.entities.players[i].pos;
+                for j in 0..self.entities.teleporters.len() {
+                    let teleporter = self.entities.teleporters[j];
                     let rect = Rect {
                         center: teleporter,
                         size: (PLAYER_SIZE + TELEPORTER_SIZE).map(|val| val / 2u16),
                     };
                     if rect.contains(player_pos) {
-                        self.players[i].pos = self.random_free_space(rng);
-                        self.teleporters[j] = self.random_free_space(rng);
+                        self.entities.players[i].pos = self.entities.random_free_space(rng);
+                        self.entities.teleporters[j] = self.entities.random_free_space(rng);
                     }
                 }
             }
         }
 
-        for player in &mut self.players {
+        for player in &mut self.entities.players {
             // correct position wrt. player<->wall collisions
             for dim in Dim::iter_domain() {
                 for check_at in Room::wall_cells_to_check_at(player.pos, dim) {
@@ -261,17 +253,19 @@ impl World {
     }
 }
 impl GameState {
-    pub fn new_seeded<B: Backend>(renderer: &mut Renderer<B>, seed: u64, config: &Config) -> Self {
-        let texture = gfx_2020::load_texture_from_path("../src/data/faces.png").unwrap();
-        let tex_id = renderer.load_texture(&texture);
-        drop(texture);
+    pub fn new<B: Backend>(renderer: &mut Renderer<B>, config: &Config) -> Self {
+        let tex_id = renderer.load_texture({
+            let image_bytes = include_bytes!("faces.png");
+            &gfx_2020::load_texture_from_bytes(image_bytes).expect("Failed to decode png!")
+        });
+        let (net, world, controlling) = Net::new(config);
         let state = GameState {
-            net: Net::new(config),
-            world: World::new_seeded(seed),
+            net,
+            world,
             pressing_state: Default::default(),
             tex_id,
             draw_infos: GameState::init_draw_infos(),
-            controlling: PlayerColor::Black,
+            controlling,
         };
         state.init_vertex_buffers(renderer);
         state
@@ -294,7 +288,8 @@ impl GameState {
     fn update_move_key(&mut self, dir: Direction, state: ElementState) {
         let dim = dir.dim();
         self.pressing_state.map[dim].map[dir.sign()] = state;
-        self.world.players[self.controlling].vel[dim] = self.pressing_state.map[dim].solo_pressed();
+        self.world.entities.players[self.controlling].vel[dim] =
+            self.pressing_state.map[dim].solo_pressed();
     }
 }
 
@@ -308,6 +303,7 @@ impl DrivesMainLoop for GameState {
 
     fn update<B: Backend>(&mut self, renderer: &mut Renderer<B>) -> Proceed {
         self.world.move_and_collide(&mut self.net);
+        self.net.update(self.controlling, &mut self.world.entities);
         self.update_vertex_buffers(renderer);
         self.update_view_transforms();
         Ok(())
@@ -358,14 +354,14 @@ impl AxisPressingState {
         }
     }
 }
-impl Index<PlayerColor> for [Player; NUM_PLAYERS as usize] {
-    type Output = Player;
-    fn index(&self, idx: PlayerColor) -> &Player {
+impl<T> Index<PlayerColor> for PlayerArr<T> {
+    type Output = T;
+    fn index(&self, idx: PlayerColor) -> &T {
         &self[Into::<usize>::into(idx)]
     }
 }
-impl IndexMut<PlayerColor> for [Player; NUM_PLAYERS as usize] {
-    fn index_mut(&mut self, idx: PlayerColor) -> &mut Player {
+impl<T> IndexMut<PlayerColor> for PlayerArr<T> {
+    fn index_mut(&mut self, idx: PlayerColor) -> &mut T {
         &mut self[Into::<usize>::into(idx)]
     }
 }

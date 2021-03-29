@@ -5,8 +5,8 @@ pub struct Rng {
 }
 
 impl Rng {
-    pub fn new_unseeded() -> Self {
-        Self { fastrand_rng: fastrand::Rng::new(), cache: 0, cache_lsb_left: 0 }
+    pub fn random_seed() -> u64 {
+        fastrand::Rng::new().u64(..)
     }
     pub fn new_seeded(seed: u64) -> Self {
         Self { fastrand_rng: fastrand::Rng::with_seed(seed), cache: 0, cache_lsb_left: 0 }
