@@ -6,6 +6,7 @@ use {
         },
         prelude::*,
     },
+    bincode::Options,
     std::{
         borrow::Cow,
         net::{SocketAddr, SocketAddrV4, UdpSocket},
@@ -62,7 +63,9 @@ const SERVER_MOVE_THRESH: DimMap<u16> = {
 };
 
 //////////////////////////////////////////////////////////////////////
-
+fn bincode_config() -> impl bincode::config::Options {
+    bincode::DefaultOptions::new().with_limit(1024).with_varint_encoding()
+}
 impl Io {
     const BUF_CAP: usize = 2048;
     pub fn nonblocking(self) -> Self {
@@ -80,7 +83,7 @@ impl Io {
         }
     }
     pub fn with_staged_msg(&mut self, msg: &Msg, func: impl FnOnce(&mut [u8], &mut UdpSocket)) {
-        bincode::serialize_into(&mut self.buf, msg).unwrap();
+        bincode_config().serialize_into(&mut self.buf, msg).unwrap();
         func(self.buf.as_mut_slice(), &mut self.udp);
         self.buf.clear();
     }
@@ -96,13 +99,15 @@ impl Io {
     pub fn recv(&mut self) -> Option<Msg> {
         self.with_temp_cap_buf(|temp_buf, udp| match udp.recv(temp_buf) {
             Ok(0) | Err(_) => None,
-            Ok(n) => bincode::deserialize(&temp_buf[..n]).ok(),
+            Ok(n) => bincode_config().deserialize(&temp_buf[..n]).ok(),
         })
     }
     pub fn recv_from(&mut self) -> Option<(Msg, SocketAddr)> {
         self.with_temp_cap_buf(|temp_buf, udp| match udp.recv_from(temp_buf) {
             Ok((0, _)) | Err(_) => None,
-            Ok((n, addr)) => bincode::deserialize(&temp_buf[..n]).ok().map(move |msg| (msg, addr)),
+            Ok((n, addr)) => {
+                bincode_config().deserialize(&temp_buf[..n]).ok().map(move |msg| (msg, addr))
+            }
         })
     }
 }

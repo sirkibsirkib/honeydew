@@ -14,6 +14,8 @@ use {
     std::path::Path,
 };
 
+#[cfg(feature = "gl")]
+extern crate gfx_backend_gl as back;
 #[cfg(feature = "metal")]
 extern crate gfx_backend_metal as back;
 #[cfg(feature = "vulkan")]

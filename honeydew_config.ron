@@ -1,12 +1,12 @@
 (
     server_mode: true,
     if_client: (
-        server_addr: "0.0.0.0:0",
+        server_addr: "192.168.1.171:20450",
         preferred_color: Black,
     ),
     if_server: (
-        server_addr: "0.0.0.0:0",
-        player_color: Blue,
+        server_addr: "192.168.1.171:20450",
+        player_color: Black,
         room_seed: None,
     ),
 )
