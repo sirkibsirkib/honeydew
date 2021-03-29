@@ -504,6 +504,7 @@ dependencies = [
 [[package]]
 name = "gfx_2020"
 version = "0.1.0"
+source = "git+https://github.com/sirkibsirkib/gfx_2020#ecc1e7da0e8d80a08e223edca8b115bae9395fe6"
 dependencies = [
  "debug_stub_derive",
  "gfx-auxil",
