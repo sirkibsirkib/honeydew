@@ -60,6 +60,7 @@ pub struct GameState {
     pub draw_infos: [DrawInfo; 4], // four replicas of all instances to pan the maze indefinitely
     // network
     pub net: Net,
+    pub local_rng: Rng,
 }
 pub struct World {
     pub room: Room,
@@ -255,17 +256,18 @@ impl World {
 impl GameState {
     pub fn new<B: Backend>(renderer: &mut Renderer<B>, config: &Config) -> Self {
         let tex_id = renderer.load_texture({
-            let image_bytes = include_bytes!("faces.png");
+            let image_bytes = include_bytes!("spritesheet.png");
             &gfx_2020::load_texture_from_bytes(image_bytes).expect("Failed to decode png!")
         });
         let (net, world, controlling) = Net::new(config);
-        let state = GameState {
+        let mut state = GameState {
             net,
             world,
             pressing_state: Default::default(),
             tex_id,
             draw_infos: GameState::init_draw_infos(),
             controlling,
+            local_rng: Rng::new_seeded(Rng::random_seed()),
         };
         state.init_vertex_buffers(renderer);
         state

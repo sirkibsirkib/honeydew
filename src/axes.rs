@@ -63,18 +63,6 @@ impl<T> DimMap<T> {
         let [zero, one] = self.arr;
         DimMap { arr: [f(zero), f(one)] }
     }
-
-    #[inline]
-    pub fn kv_map<N>(&self, f: fn(Dim, &T) -> N) -> DimMap<N>
-    where
-        N: Default + Copy,
-    {
-        let mut new = DimMap { arr: [N::default(); 2] };
-        for dim in Dim::iter_domain() {
-            new[dim] = f(dim, &self[dim]);
-        }
-        new
-    }
 }
 impl<T: Add<Output = T> + Copy> Add for DimMap<T> {
     type Output = Self;
@@ -103,9 +91,22 @@ impl Div<f32> for DimMap<f32> {
         self
     }
 }
-impl Mul<f32> for DimMap<f32> {
+impl<T: PartialOrd> PartialOrd for DimMap<T> {
+    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
+        let [a, b] = [
+            self[X].partial_cmp(&rhs[X]), // hello, there
+            self[Y].partial_cmp(&rhs[Y]),
+        ];
+        if a == b {
+            a
+        } else {
+            None
+        }
+    }
+}
+impl<T: Copy + Mul<Output = T>> Mul<T> for DimMap<T> {
     type Output = Self;
-    fn mul(mut self, rhs: f32) -> Self {
+    fn mul(mut self, rhs: T) -> Self {
         for dim in Dim::iter_domain() {
             self[dim] = self[dim] * rhs;
         }

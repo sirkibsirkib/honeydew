@@ -18,7 +18,12 @@ use {
 pub(crate) fn game_state_init_fn<B: Backend>(
     renderer: &mut Renderer<B>,
 ) -> ProceedWith<&'static mut GameState> {
-    let config_path = Path::new("./honeydew_config.ron");
+    let maybe_arg = std::env::args().nth(1);
+    let config_path = if let Some(arg) = maybe_arg.as_ref() {
+        Path::new(arg)
+    } else {
+        Path::new("./honeydew_config.ron")
+    };
     let config = Config::try_load_from(config_path).unwrap_or_else(move || {
         println!("No config found at {:?}. Generating default!", config_path.canonicalize());
         let config = Config::default();

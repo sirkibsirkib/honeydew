@@ -59,9 +59,6 @@ impl BitIndex {
     pub fn random(rng: &mut Rng) -> Self {
         Self(rng.fastrand_rng.u16(0..INDICES))
     }
-    pub fn iter_domain() -> impl Iterator<Item = Self> + Clone {
-        (0..INDICES).map(Self)
-    }
 }
 
 impl BitSet {

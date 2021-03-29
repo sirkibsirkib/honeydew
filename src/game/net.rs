@@ -2,13 +2,13 @@ use {
     crate::{
         game::{
             config::{Config, IfClient, IfServer},
-            Entities, Player, PlayerArr, PlayerColor, Room, World,
+            Entities, Player, PlayerArr, PlayerColor, Room, World, MOV_SPEED,
         },
         prelude::*,
     },
     std::{
         borrow::Cow,
-        net::{SocketAddr, UdpSocket},
+        net::{SocketAddr, SocketAddrV4, UdpSocket},
     },
 };
 
@@ -54,6 +54,12 @@ enum Msg<'a> {
     CtsUpdate { player: Player, timestamp: WrapInt },
     StcUpdate { timely: TimelyGameData<'a> },
 }
+const SERVER_MOVE_THRESH: DimMap<u16> = {
+    let mut res = MOV_SPEED;
+    res.arr[0] *= 30;
+    res.arr[1] *= 30;
+    res
+};
 
 //////////////////////////////////////////////////////////////////////
 
@@ -123,7 +129,8 @@ impl Net {
     }
 
     pub fn new_client(config: &IfClient) -> (Self, World, PlayerColor) {
-        let mut io = Io::new(config.server_addr.into()).connected(config.server_addr.into());
+        let mut io = Io::new(SocketAddrV4::new(std::net::Ipv4Addr::UNSPECIFIED, 0).into())
+            .connected(config.server_addr.into());
         let hello = Msg::CtsHello { preferred_color: config.preferred_color };
         loop {
             io.with_staged_msg(&hello, |bytes, udp| {
@@ -155,13 +162,22 @@ impl Net {
         match &mut self.sc {
             Sc::Client { last_server_timestamp } => {
                 // I am the client!
-                // update entities wrt incoming message data
+                // handle all incoming server update messages in the correct order
                 while let Some(Msg::StcUpdate { timely }) = self.io.recv() {
                     if *last_server_timestamp < timely.timestamp {
                         // new info!
-                        let my_vel = entities.players[my_color].vel;
+                        *last_server_timestamp = timely.timestamp;
+                        // overwrite all entity data except my own
+                        let my_old = entities.players[my_color].clone();
                         *entities = timely.entities.into_owned();
-                        entities.players[my_color].vel = my_vel;
+                        let my_new = &mut entities.players[my_color];
+                        // ... but not my velocity (mine is always accurate)
+                        my_new.vel = my_old.vel;
+                        // client ignores updates representing SMALL STEPS
+                        if my_old.pos.abs_differences(my_new.pos) < SERVER_MOVE_THRESH {
+                            // the difference was a small step. RESTORE what I had before
+                            my_new.pos = my_old.pos;
+                        }
                     }
                 }
                 // update the server!
@@ -229,7 +245,15 @@ impl Net {
                                         // found them!
                                         if client.last_client_timestamp < timestamp {
                                             // update player data with newer info!
-                                            entities.players[color] = player;
+                                            let curr_player = &mut entities.players[color];
+                                            // server accepts SMALL STEPS, ignores LARGE JUMPS
+                                            if curr_player.pos.abs_differences(player.pos)
+                                                < SERVER_MOVE_THRESH
+                                            {
+                                                // the step was SMALL (keep it!)
+                                                curr_player.pos = player.pos;
+                                            }
+                                            curr_player.vel = player.vel;
                                             client.last_client_timestamp = timestamp;
                                         }
                                         break 'find_player;
@@ -257,5 +281,11 @@ impl Net {
             }
         }
         self.my_timestamp += 1u16;
+    }
+}
+
+impl Pos {
+    fn abs_differences(self, other: Self) -> DimMap<u16> {
+        DimMap::new_xy_with(|dim| (self[dim] - other[dim]).distance_from_zero())
     }
 }

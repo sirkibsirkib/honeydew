@@ -22,6 +22,3 @@ pub use {
     serde::{Deserialize, Serialize},
     std::array::IntoIter as ArrIter,
 };
-pub fn unspecified_sock_addr() -> std::net::SocketAddrV4 {
-    std::net::SocketAddrV4::new(std::net::Ipv4Addr::new(0, 0, 0, 0), 0)
-}

@@ -42,7 +42,7 @@ const fn range_concat(r: Range<u32>, len: u32) -> Range<u32> {
 }
 
 fn scissor_for_tile_at([x, y]: [u16; 2]) -> TexScissor {
-    const TILE_SIZE: Vec2 = Vec2 { x: 1. / 6., y: 1. / 3. };
+    const TILE_SIZE: Vec2 = Vec2 { x: 1. / 4., y: 1. / 2. };
     TexScissor {
         top_left: Vec2::new(TILE_SIZE[0] * x as f32, TILE_SIZE[1] * y as f32),
         size: TILE_SIZE,
@@ -62,17 +62,18 @@ impl GameState {
         };
         [new_draw_info(), new_draw_info(), new_draw_info(), new_draw_info()]
     }
-    pub fn init_vertex_buffers<B: Backend>(&self, renderer: &mut Renderer<B>) {
+    pub fn init_vertex_buffers<B: Backend>(&mut self, renderer: &mut Renderer<B>) {
         // called ONCE as game starts
         Self::update_tri_verts(renderer);
         self.update_tex_scissors(renderer);
         self.update_wall_transforms(renderer);
         self.update_vertex_buffers(renderer);
     }
-    pub fn update_vertex_buffers<B: Backend>(&self, renderer: &mut Renderer<B>) {
+    pub fn update_vertex_buffers<B: Backend>(&mut self, renderer: &mut Renderer<B>) {
         // called once per update tick
         self.update_player_transforms(renderer);
         self.update_teleporter_transforms(renderer);
+        self.randomize_teleporter_tex_scissors(renderer);
     }
     pub fn update_view_transforms(&mut self) {
         const ZOOM_OUT: f32 = 4.;
@@ -122,19 +123,21 @@ impl GameState {
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_TELEPORTERS.start, iter);
     }
-    fn update_tex_scissors<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        use std::iter::repeat;
-        // teleporters
+    fn randomize_teleporter_tex_scissors<B: Backend>(&mut self, renderer: &mut Renderer<B>) {
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_TELEPORTERS.start,
-            repeat(scissor_for_tile_at([1, 0])).take(self.world.entities.teleporters.len()),
+            (0..self.world.entities.teleporters.len())
+                .map(|_| scissor_for_tile_at([self.local_rng.gen_bits(2) as u16, 1])),
         );
+    }
+    fn update_tex_scissors<B: Backend>(&mut self, renderer: &mut Renderer<B>) {
+        use std::iter::repeat;
+        // teleporters
+        self.randomize_teleporter_tex_scissors(renderer);
         // players
         renderer.write_vertex_buffer(
             INSTANCE_RANGE_PLAYERS.start,
-            [scissor_for_tile_at([1, 2]), scissor_for_tile_at([3, 2]), scissor_for_tile_at([5, 2])]
-                .iter()
-                .copied(),
+            (1..4).map(|x| scissor_for_tile_at([x, 0])),
         );
         // walls
         renderer.write_vertex_buffer(

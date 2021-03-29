@@ -1,11 +1,6 @@
 use {
     crate::{game::PlayerColor, prelude::*},
-    std::{
-        fs::File,
-        io::Write,
-        net::{Ipv4Addr, SocketAddrV4},
-        path::Path,
-    },
+    std::{fs::File, io::Write, net::SocketAddrV4, path::Path},
 };
 
 #[derive(Serialize, Deserialize)]
@@ -33,7 +28,7 @@ impl Config {
         File::open(path).ok().and_then(|f| ron::de::from_reader(f).ok())
     }
     pub fn write_ron_into(&self, w: impl Write) {
-        ron::ser::to_writer_pretty(w, self, ron::ser::PrettyConfig::default());
+        ron::ser::to_writer_pretty(w, self, ron::ser::PrettyConfig::default()).unwrap();
     }
     pub fn try_save_into(&self, path: &Path) -> bool {
         File::create(path).map(move |f| self.write_ron_into(f)).is_ok()
@@ -41,7 +36,7 @@ impl Config {
 }
 impl Default for Config {
     fn default() -> Self {
-        let server_addr = unspecified_sock_addr();
+        let server_addr = SocketAddrV4::new(std::net::Ipv4Addr::LOCALHOST, 8000);
         Self {
             server_mode: true,
             if_client: IfClient { preferred_color: PlayerColor::Black, server_addr },
