@@ -13,6 +13,11 @@ use {
     gfx_2020::{gfx_hal::Backend, *},
     std::path::Path,
 };
+
+#[cfg(feature = "metal")]
+extern crate gfx_backend_metal as back;
+#[cfg(feature = "vulkan")]
+extern crate gfx_backend_vulkan as back;
 /////////////////////////////////
 
 pub(crate) fn game_state_init_fn<B: Backend>(
@@ -41,5 +46,5 @@ pub(crate) fn game_state_init_fn<B: Backend>(
 }
 
 fn main() {
-    gfx_2020::main_loop::<gfx_backend::Backend, _, _>(&render_config(), game_state_init_fn);
+    gfx_2020::main_loop::<back::Backend, _, _>(&render_config(), game_state_init_fn);
 }
