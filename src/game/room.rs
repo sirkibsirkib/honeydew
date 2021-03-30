@@ -8,8 +8,8 @@ use {
     core::ops::Neg,
 };
 
-pub const ROOM_SIZE: DimMap<u32> = DimMap::new([u16::MAX as u32 + 1; 2]);
-pub const CELL_COUNTS: DimMap<u8> = DimMap::new([16, 16]);
+pub const ROOM_SIZE: DimMap<u32> = DimMap::new([WrapInt::DOMAIN_SIZE; 2]);
+pub const CELL_COUNTS: DimMap<u8> = DimMap::new([16, 4]);
 pub const TOT_CELL_COUNT: u16 = CELL_COUNTS.arr[0] as u16 * CELL_COUNTS.arr[1] as u16;
 pub const CELL_SIZE: DimMap<u16> = DimMap::new([
     (ROOM_SIZE.arr[0] / CELL_COUNTS.arr[0] as u32) as u16,

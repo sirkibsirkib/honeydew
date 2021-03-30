@@ -16,8 +16,13 @@ pub const PLAYER_SIZE: DimMap<u16> =
 
 pub const TELEPORTER_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 3, CELL_SIZE.arr[1] / 3]);
 
-pub const UP_WALL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 8]);
-pub const LE_WALL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 8, CELL_SIZE.arr[1]]);
+pub const WALL_SIZE: DimMap<DimMap<u16>> = DimMap::new([
+    DimMap::new([CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 8]),
+    DimMap::new([CELL_SIZE.arr[0] / 8, CELL_SIZE.arr[1]]),
+]);
+
+// pub const UP_WALL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 8]);
+// pub const LE_WALL_SIZE: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 8, CELL_SIZE.arr[1]]);
 
 pub const MOV_SPEED: DimMap<u16> = DimMap::new([CELL_SIZE.arr[0] / 16, CELL_SIZE.arr[1] / 16]);
 
@@ -93,7 +98,6 @@ impl Default for AxisPressingState {
 }
 
 //////////////////////////
-
 impl Into<usize> for PlayerColor {
     fn into(self) -> usize {
         self as usize
@@ -273,14 +277,14 @@ impl GameState {
         state
     }
     fn wall_min_dists(dim: Dim) -> DimMap<u16> {
-        (Self::wall_size(dim) + PLAYER_SIZE).map(|val| val / 2u16)
+        (WALL_SIZE[dim] + PLAYER_SIZE).map(|val| val / 2u16)
     }
-    pub fn wall_size(dim: Dim) -> DimMap<u16> {
-        match dim {
-            X => UP_WALL_SIZE,
-            Y => LE_WALL_SIZE,
-        }
-    }
+    // pub fn wall_size(dim: Dim) -> DimMap<u16> {
+    //     match dim {
+    //         X => UP_WALL_SIZE,
+    //         Y => LE_WALL_SIZE,
+    //     }
+    // }
     pub fn wall_pos(coord: Coord, dim: Dim) -> Pos {
         // e.g. X dim wall at Coord[0,0] has pos [0.5, 0.0]
         let mut pos = coord.corner_pos();

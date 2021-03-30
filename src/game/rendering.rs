@@ -1,8 +1,9 @@
 use {
     crate::{
         game::{
-            room::CELL_COUNTS, GameState, MAX_WALLS, NUM_PLAYERS, NUM_TELEPORTERS, PLAYER_SIZE,
-            TELEPORTER_SIZE, UP_WALL_SIZE,
+            room::{CELL_COUNTS, ROOM_SIZE},
+            GameState, MAX_WALLS, NUM_PLAYERS, NUM_TELEPORTERS, PLAYER_SIZE, TELEPORTER_SIZE,
+            WALL_SIZE,
         },
         prelude::*,
     },
@@ -104,8 +105,8 @@ impl GameState {
     fn update_wall_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.room.iter_walls().map(move |(coord, dim)| {
             Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.))
-                * Mat4::from_rotation_z(if let Y = dim { PI_F32 * -0.5 } else { 0. })
-                * Mat4::from_scale(UP_WALL_SIZE.to_screen2().extend(1.))
+                // * Mat4::from_rotation_z(if let Y = dim { PI_F32 * -0.5 } else { 0. })
+                * Mat4::from_scale(WALL_SIZE[dim].to_screen2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
@@ -144,5 +145,17 @@ impl GameState {
             INSTANCE_RANGE_WALLS.start,
             repeat(scissor_for_tile_at([0, 0])).take(self.world.room.wall_count() as usize),
         );
+    }
+}
+
+impl DimMap<WrapInt> {
+    pub fn to_screen2(self) -> Vec2 {
+        self.map(Into::<u16>::into).to_screen2()
+    }
+}
+impl DimMap<u16> {
+    pub fn to_screen2(self) -> Vec2 {
+        let f = move |dim| self[dim] as f32 / ROOM_SIZE[dim] as f32;
+        Vec2 { x: f(X), y: f(Y) }
     }
 }

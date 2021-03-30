@@ -1,5 +1,5 @@
 use {
-    crate::{game::room::ROOM_SIZE, prelude::*, rng::Rng},
+    crate::{prelude::*, rng::Rng},
     core::ops::{Add, Div, Mul, Neg, Not, Sub},
 };
 ////////////////////////////////
@@ -38,17 +38,6 @@ pub struct SignMap<T> {
 
 /////////////////////////////////////
 
-impl DimMap<WrapInt> {
-    pub fn to_screen2(self) -> Vec2 {
-        self.map(Into::<u16>::into).to_screen2()
-    }
-}
-impl DimMap<u16> {
-    pub fn to_screen2(self) -> Vec2 {
-        let f = move |dim| self[dim] as f32 / ROOM_SIZE[dim] as f32;
-        Vec2 { x: f(X), y: f(Y) }
-    }
-}
 impl<T> DimMap<T> {
     pub const fn new(arr: [T; 2]) -> Self {
         Self { arr }
