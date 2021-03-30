@@ -107,7 +107,7 @@ impl GameState {
     }
     fn update_wall_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.room.iter_walls().map(move |(coord, dim)| {
-            Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.5))
+            Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.1)) // BEHIND DOORS, ABOVE PLAYERS
                 * Mat4::from_scale(WALL_SIZE[dim].to_screen2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
@@ -115,14 +115,14 @@ impl GameState {
     fn update_my_door_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         for my_door_idx in self.my_doors_just_moved.into_iter() {
             let MyDoor { coord, dim } = self.my_doors[my_door_idx];
-            let t = Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.))
+            let t = Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.)) // ABOVE WALLS
                 * Mat4::from_scale(WALL_SIZE[dim].to_screen2().extend(1.));
             renderer.write_vertex_buffer(INSTANCE_RANGE_MY_DOORS.start, std::iter::once(t));
         }
     }
     fn update_player_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.entities.players.iter().map(move |player| {
-            Mat4::from_translation(player.pos.to_screen2().extend(0.))
+            Mat4::from_translation(player.pos.to_screen2().extend(0.2)) // BEHIND WALLS
                 * Mat4::from_scale(PLAYER_SIZE.to_screen2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_PLAYERS.start, iter);
