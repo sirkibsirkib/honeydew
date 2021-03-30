@@ -13,14 +13,15 @@ use {
 
 pub const MOVE_SPEED: u16 = 16;
 pub const MOVE_SIZE: Size = CELL_SIZE.scalar_div(MOVE_SPEED);
+pub const MOVE_SIZE_DIAG: Size = MOVE_SIZE.scalar_mul(5).scalar_div(7);
 
 pub const NUM_DRAW_INFOS: usize = 4;
 
 pub const PLAYER_SIZE: Size = CELL_SIZE.scalar_div(9).scalar_mul(4);
 pub const TELEPORTER_SIZE: Size = CELL_SIZE.scalar_div(2);
 pub const WALL_SIZE: DimMap<Size> = DimMap::new([
-    Size::new([CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 8]),
-    Size::new([CELL_SIZE.arr[0] / 8, CELL_SIZE.arr[1]]),
+    Size::new([CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 7]),
+    Size::new([CELL_SIZE.arr[0] / 7, CELL_SIZE.arr[1]]),
 ]);
 
 // allows an upper bound for renderer's instance buffers
@@ -267,9 +268,14 @@ impl GameState {
     fn move_and_collide(&mut self) {
         // player movement
         for player in &mut self.world.entities.players {
+            let move_size = if player.vel[X].is_some() && player.vel[Y].is_some() {
+                MOVE_SIZE_DIAG
+            } else {
+                MOVE_SIZE
+            };
             for dim in Dim::iter_domain() {
                 if let Some(sign) = player.vel[dim] {
-                    player.pos[dim] += sign * WrapInt::from(MOVE_SIZE[dim]);
+                    player.pos[dim] += sign * WrapInt::from(move_size[dim]);
                 }
             }
         }

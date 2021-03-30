@@ -131,6 +131,7 @@ impl Room {
         mut pos: Pos,
         wall_dim: Dim,
     ) -> impl Iterator<Item = Coord> + Clone {
+        // returning a, b first to prioritize closer collisions
         std::array::IntoIter::new(match wall_dim {
             X => {
                 // H walls! search grid 3 wide and 2 high
@@ -141,7 +142,7 @@ impl Room {
                 [. a .]
                 [. b .]
                 */
-                [a.stepped(Left), a, a.stepped(Right), b.stepped(Left), b, b.stepped(Right)]
+                [a, b, a.stepped(Left), a.stepped(Right), b.stepped(Left), b.stepped(Right)]
             }
             Y => {
                 // V walls! search grid 2 wide and 3 high
@@ -153,7 +154,7 @@ impl Room {
                 [a b]
                 [. .]
                 */
-                [a.stepped(Up), b.stepped(Up), a, b, a.stepped(Down), b.stepped(Down)]
+                [a, b, a.stepped(Up), b.stepped(Up), a.stepped(Down), b.stepped(Down)]
             }
         })
     }
