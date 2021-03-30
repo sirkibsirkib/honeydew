@@ -2,7 +2,7 @@ use {
     crate::{
         game::{
             config::{Config, IfClient, IfServer},
-            Entities, Player, PlayerArr, PlayerColor, Room, World, MOV_SPEED,
+            Entities, Player, PlayerArr, PlayerColor, Room, World, MOVE_SIZE,
         },
         prelude::*,
     },
@@ -55,12 +55,8 @@ enum Msg<'a> {
     CtsUpdate { player: Player, timestamp: WrapInt },
     StcUpdate { timely: TimelyGameData<'a> },
 }
-const SERVER_MOVE_THRESH: DimMap<u16> = {
-    let mut res = MOV_SPEED;
-    res.arr[0] *= 30;
-    res.arr[1] *= 30;
-    res
-};
+
+const ACCEPTED_CLIENT_MOVE: Size = MOVE_SIZE.scalar_mul(12);
 
 //////////////////////////////////////////////////////////////////////
 fn bincode_config() -> impl bincode::config::Options {
@@ -179,7 +175,8 @@ impl Net {
                         // ... but not my velocity (mine is always accurate)
                         my_new.vel = my_old.vel;
                         // client ignores updates representing SMALL STEPS
-                        if my_old.pos.abs_differences(my_new.pos) < SERVER_MOVE_THRESH {
+                        let diff = my_old.pos - my_new.pos;
+                        if diff.distances_from_zero() < ACCEPTED_CLIENT_MOVE {
                             // the difference was a small step. RESTORE what I had before
                             my_new.pos = my_old.pos;
                         }
@@ -252,9 +249,8 @@ impl Net {
                                             // update player data with newer info!
                                             let curr_player = &mut entities.players[color];
                                             // server accepts SMALL STEPS, ignores LARGE JUMPS
-                                            if curr_player.pos.abs_differences(player.pos)
-                                                < SERVER_MOVE_THRESH
-                                            {
+                                            let diff = curr_player.pos - player.pos;
+                                            if diff.distances_from_zero() < ACCEPTED_CLIENT_MOVE {
                                                 // the step was SMALL (keep it!)
                                                 curr_player.pos = player.pos;
                                             }
@@ -286,11 +282,5 @@ impl Net {
             }
         }
         self.my_timestamp += 1u16;
-    }
-}
-
-impl Pos {
-    fn abs_differences(self, other: Self) -> DimMap<u16> {
-        DimMap::new_xy_with(|dim| (self[dim] - other[dim]).distance_from_zero())
     }
 }

@@ -14,7 +14,7 @@ pub enum Direction {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Dim {
     X,
     Y,

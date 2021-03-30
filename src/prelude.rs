@@ -7,7 +7,7 @@ pub use {
             Sign::{self, *},
             SignMap,
         },
-        game::{Pos, Vel},
+        game::{Pos, Size, Vel},
         rng::Rng,
         wrap_int::WrapInt,
     },
