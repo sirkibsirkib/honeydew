@@ -808,11 +808,10 @@ dependencies = [
 [[package]]
 name = "gfx_2020"
 version = "0.1.0"
-source = "git+https://github.com/sirkibsirkib/gfx_2020#ecc1e7da0e8d80a08e223edca8b115bae9395fe6"
+source = "git+https://github.com/sirkibsirkib/gfx_2020#751b4554a7aac20e6006d5e28c56bb7015bc6160"
 dependencies = [
  "debug_stub_derive",
  "gfx-auxil",
- "gfx-backend-vulkan",
  "gfx-hal",
  "glam",
  "image",
@@ -2473,6 +2472,7 @@ dependencies = [
  "parking_lot 0.11.1",
  "percent-encoding",
  "raw-window-handle",
+ "serde",
  "smithay-client-toolkit 0.12.3",
  "wayland-client 0.28.5",
  "winapi 0.3.9",

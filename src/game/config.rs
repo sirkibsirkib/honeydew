@@ -1,13 +1,24 @@
+use crate::winit::event::VirtualKeyCode;
 use {
     crate::{game::PlayerColor, prelude::*},
     std::{fs::File, io::Write, net::SocketAddrV4, path::Path},
 };
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct InputConfig {
+    pub exit: VirtualKeyCode,
+    pub up: VirtualKeyCode,
+    pub down: VirtualKeyCode,
+    pub left: VirtualKeyCode,
+    pub right: VirtualKeyCode,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub server_mode: bool,
     pub if_client: IfClient,
     pub if_server: IfServer,
+    pub input: InputConfig,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -37,10 +48,18 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         let server_addr = SocketAddrV4::new(std::net::Ipv4Addr::LOCALHOST, 8000);
+        use VirtualKeyCode as Vkc;
         Self {
             server_mode: true,
             if_client: IfClient { preferred_color: PlayerColor::Black, server_addr },
             if_server: IfServer { room_seed: None, player_color: PlayerColor::Black, server_addr },
+            input: InputConfig {
+                up: Vkc::W,
+                down: Vkc::S,
+                left: Vkc::A,
+                right: Vkc::D,
+                exit: Vkc::Escape,
+            },
         }
     }
 }

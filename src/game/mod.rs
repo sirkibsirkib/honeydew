@@ -5,7 +5,7 @@ pub mod room;
 
 use {
     crate::{prelude::*, rng::Rng},
-    config::Config,
+    config::{Config, InputConfig},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
     net::Net,
     room::{Coord, Room, CELL_SIZE, TOT_CELL_COUNT},
@@ -73,6 +73,7 @@ pub struct GameState {
     // controlling
     pub controlling: PlayerColor,
     pub pressing_state: PressingState,
+    pub input_config: InputConfig,
     // rendering
     pub tex_id: TexId,
     pub draw_infos: [DrawInfo; NUM_DRAW_INFOS], // four replicas of all instances to pan the maze indefinitely
@@ -368,6 +369,7 @@ impl GameState {
             draw_infos: GameState::init_draw_infos(),
             controlling,
             local_rng,
+            input_config: config.input.clone(),
         };
         state.init_vertex_buffers(renderer);
         state
@@ -407,27 +409,20 @@ impl DrivesMainLoop for GameState {
         _renderer: &mut Renderer<B>,
         event: winit::event::Event<()>,
     ) -> Proceed {
-        use winit::event::{
-            Event as Ev, KeyboardInput as Ki, VirtualKeyCode as Vkc, WindowEvent as We,
-        };
+        use winit::event::{Event as Ev, KeyboardInput as Ki, WindowEvent as We};
         match event {
             Ev::WindowEvent { event: We::CloseRequested, .. } => return Err(HaltLoop),
             Ev::WindowEvent { event: We::KeyboardInput { input, .. }, .. } => {
                 // ok
                 match input {
-                    Ki { virtual_keycode: Some(Vkc::Escape), .. } => return Err(HaltLoop),
-                    Ki { virtual_keycode: Some(Vkc::W), state, .. } => {
-                        self.update_move_key(Up, state)
-                    }
-                    Ki { virtual_keycode: Some(Vkc::A), state, .. } => {
-                        self.update_move_key(Left, state)
-                    }
-                    Ki { virtual_keycode: Some(Vkc::S), state, .. } => {
-                        self.update_move_key(Down, state)
-                    }
-                    Ki { virtual_keycode: Some(Vkc::D), state, .. } => {
-                        self.update_move_key(Right, state)
-                    }
+                    Ki { virtual_keycode: Some(vkc), state, .. } => match vkc {
+                        x if x == self.input_config.exit => return Err(HaltLoop),
+                        x if x == self.input_config.up => self.update_move_key(Up, state),
+                        x if x == self.input_config.down => self.update_move_key(Down, state),
+                        x if x == self.input_config.left => self.update_move_key(Left, state),
+                        x if x == self.input_config.right => self.update_move_key(Right, state),
+                        _ => {}
+                    },
                     _ => {}
                 }
             }
