@@ -14,6 +14,10 @@ use {
     std::path::Path,
 };
 
+#[cfg(feature = "dx11")]
+extern crate gfx_backend_dx11 as back;
+#[cfg(feature = "dx12")]
+extern crate gfx_backend_dx12 as back;
 #[cfg(feature = "gl")]
 extern crate gfx_backend_gl as back;
 #[cfg(feature = "metal")]

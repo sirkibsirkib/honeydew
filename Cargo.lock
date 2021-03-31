@@ -121,6 +121,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-set"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e11e16035ea35e4e5997b393eacbf6f63983188f7a2ad25bfb13465f5ad59de"
+dependencies = [
+ "bit-vec",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
+
+[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -458,6 +473,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "d3d12"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0a60cceb22c7c53035f8980524fdc7f17cf49681a3c154e6757d30afbec6ec4"
+dependencies = [
+ "bitflags",
+ "libloading 0.6.7",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "darling"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -658,6 +684,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "gfx-backend-dx11"
+version = "0.6.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54b43f06089866bdffe59b5a6801022c86b74d2c1dd28940a9cf301d3d014fbc"
+dependencies = [
+ "arrayvec",
+ "bitflags",
+ "gfx-auxil",
+ "gfx-hal",
+ "libloading 0.6.7",
+ "log",
+ "parking_lot 0.11.1",
+ "range-alloc",
+ "raw-window-handle",
+ "smallvec 1.6.1",
+ "spirv_cross",
+ "thunderdome",
+ "winapi 0.3.9",
+ "wio",
+]
+
+[[package]]
+name = "gfx-backend-dx12"
+version = "0.6.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "375014deed24d76b03604736dd899f0925158a1a96db90cbefb9cce070f71af7"
+dependencies = [
+ "arrayvec",
+ "bit-set",
+ "bitflags",
+ "d3d12",
+ "gfx-auxil",
+ "gfx-hal",
+ "log",
+ "range-alloc",
+ "raw-window-handle",
+ "smallvec 1.6.1",
+ "spirv_cross",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "gfx-backend-gl"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -837,6 +905,8 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "fastrand",
+ "gfx-backend-dx11",
+ "gfx-backend-dx12",
  "gfx-backend-gl",
  "gfx-backend-metal",
  "gfx-backend-vulkan",
@@ -2013,6 +2083,12 @@ dependencies = [
  "quote 1.0.9",
  "syn 1.0.67",
 ]
+
+[[package]]
+name = "thunderdome"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7572415bd688d401c52f6e36f4c8e805b9ae1622619303b9fa835d531db0acae"
 
 [[package]]
 name = "tiff"
