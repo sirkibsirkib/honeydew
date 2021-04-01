@@ -1,7 +1,7 @@
 use {
     crate::{
         game::{
-            room::{CELL_COUNTS, ROOM_SIZE},
+            room::{CELL_SIZE, HALF_ROOM_SIZE, ROOM_SIZE},
             GameState, MyDoor, MAX_WALLS, NUM_DRAW_INFOS, NUM_MY_DOORS, NUM_PLAYERS,
             NUM_TELEPORTERS, PLAYER_SIZE, TELEPORTER_SIZE, WALL_SIZE,
         },
@@ -21,6 +21,7 @@ pub const INSTANCE_RANGE_MY_DOORS: Range<u32> =
     range_concat(INSTANCE_RANGE_TELEPORTERS, NUM_MY_DOORS);
 pub const INSTANCE_RANGE_WALLS: Range<u32> = range_concat(INSTANCE_RANGE_MY_DOORS, MAX_WALLS);
 pub const MAX_INSTANCES: u32 = INSTANCE_RANGE_WALLS.end;
+pub const VIEW_SIZE: Size = CELL_SIZE.scalar_mul(4);
 
 // for debugging. true for release.
 pub const ENABLE_WRAP_DRAW: bool = true;
@@ -81,21 +82,25 @@ impl GameState {
         self.update_my_door_transforms(renderer);
     }
     pub fn update_view_transforms(&mut self) {
-        const ZOOM_OUT: f32 = 4.;
         const SCALE_XY: Vec2 = Vec2 {
-            x: CELL_COUNTS.arr[0] as f32 / ZOOM_OUT,
-            y: CELL_COUNTS.arr[1] as f32 / ZOOM_OUT,
+            x: 1. / VIEW_SIZE.arr[0] as f32, // yary
+            y: 1. / VIEW_SIZE.arr[1] as f32,
         };
         let translations = {
-            let mut s = self.world.entities.players[self.controlling].pos.to_screen2();
+            let mut s = self.world.entities.players[self.controlling].pos.to_vec2();
             if ENABLE_WRAP_DRAW {
                 for idx in 0..2 {
-                    if s[idx] < 0.5 {
-                        s[idx] += 1.;
+                    if s[idx] < HALF_ROOM_SIZE.arr[idx] as f32 {
+                        s[idx] += ROOM_SIZE.arr[idx] as f32;
                     }
                 }
             }
-            [-s, -s + [0., 1.].into(), -s + [1., 0.].into(), -s + [1., 1.].into()]
+            [
+                -s, //yas
+                -s + [0., ROOM_SIZE[Y] as f32].into(),
+                -s + [ROOM_SIZE[X] as f32, 0.].into(),
+                -s + [ROOM_SIZE[X] as f32, ROOM_SIZE[Y] as f32].into(),
+            ]
         };
         for (draw_info, pos_vec2) in self.draw_infos.iter_mut().zip(translations.iter()) {
             draw_info.view_transform =
@@ -107,30 +112,30 @@ impl GameState {
     }
     fn update_wall_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.room.iter_walls().map(move |(coord, dim)| {
-            Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.1)) // BEHIND DOORS, ABOVE PLAYERS
-                * Mat4::from_scale(WALL_SIZE[dim].to_screen2().extend(1.))
+            Mat4::from_translation(GameState::wall_pos(coord, dim).to_vec2().extend(0.1)) // BEHIND DOORS, ABOVE PLAYERS
+                * Mat4::from_scale(WALL_SIZE[dim].to_vec2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
     fn update_my_door_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         for my_door_idx in self.my_doors_just_moved.into_iter() {
             let MyDoor { coord, dim } = self.my_doors[my_door_idx];
-            let t = Mat4::from_translation(GameState::wall_pos(coord, dim).to_screen2().extend(0.)) // ABOVE WALLS
-                * Mat4::from_scale(WALL_SIZE[dim].to_screen2().extend(1.));
+            let t = Mat4::from_translation(GameState::wall_pos(coord, dim).to_vec2().extend(0.)) // ABOVE WALLS
+                * Mat4::from_scale(WALL_SIZE[dim].to_vec2().extend(1.));
             renderer.write_vertex_buffer(INSTANCE_RANGE_MY_DOORS.start, std::iter::once(t));
         }
     }
     fn update_player_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.entities.players.iter().map(move |player| {
-            Mat4::from_translation(player.pos.to_screen2().extend(0.2)) // BEHIND WALLS
-                * Mat4::from_scale(PLAYER_SIZE.to_screen2().extend(1.))
+            Mat4::from_translation(player.pos.to_vec2().extend(0.2)) // BEHIND WALLS
+                * Mat4::from_scale(PLAYER_SIZE.to_vec2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_PLAYERS.start, iter);
     }
     fn update_teleporter_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.entities.teleporters.iter().map(move |pos| {
-            Mat4::from_translation(pos.to_screen2().extend(0.))
-                * Mat4::from_scale(TELEPORTER_SIZE.to_screen2().extend(1.))
+            Mat4::from_translation(pos.to_vec2().extend(0.))
+                * Mat4::from_scale(TELEPORTER_SIZE.to_vec2().extend(1.))
         });
         renderer.write_vertex_buffer(INSTANCE_RANGE_TELEPORTERS.start, iter);
     }
@@ -168,13 +173,12 @@ impl GameState {
 }
 
 impl Pos {
-    pub fn to_screen2(self) -> Vec2 {
-        self.map(Into::<u16>::into).to_screen2()
+    pub fn to_vec2(self) -> Vec2 {
+        self.map(Into::<u16>::into).to_vec2()
     }
 }
 impl Size {
-    pub fn to_screen2(self) -> Vec2 {
-        let f = move |dim| self[dim] as f32 / ROOM_SIZE[dim] as f32;
-        Vec2 { x: f(X), y: f(Y) }
+    pub fn to_vec2(self) -> Vec2 {
+        Vec2 { x: self[X] as f32, y: self[Y] as f32 }
     }
 }

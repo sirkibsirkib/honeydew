@@ -27,7 +27,9 @@ pub enum Sign {
     Negative,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug, Copy, Clone, Default, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Eq, PartialEq, Hash, Debug, Copy, Clone, Default, Serialize, Deserialize,
+)]
 pub struct DimMap<T> {
     pub arr: [T; 2],
 }
@@ -78,19 +80,6 @@ impl Div<f32> for DimMap<f32> {
             self[dim] = self[dim] / rhs;
         }
         self
-    }
-}
-impl<T: PartialOrd> PartialOrd for DimMap<T> {
-    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
-        let [a, b] = [
-            self[X].partial_cmp(&rhs[X]), // hello, there
-            self[Y].partial_cmp(&rhs[Y]),
-        ];
-        if a == b {
-            a
-        } else {
-            None
-        }
     }
 }
 impl<T: Copy + Mul<Output = T>> Mul<T> for DimMap<T> {
@@ -187,7 +176,6 @@ impl Not for Sign {
 
 impl Dim {
     pub const DOMAIN: [Self; 2] = [X, Y];
-
     #[inline(always)]
     pub fn sign(self, sign: Sign) -> Direction {
         Direction::new(self, sign)
@@ -206,6 +194,10 @@ impl Dim {
 }
 
 impl Direction {
+    #[inline(always)]
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        [Up, Down, Left, Right].iter().copied()
+    }
     #[inline(always)]
     pub const fn new(dim: Dim, sign: Sign) -> Self {
         match (dim, sign) {

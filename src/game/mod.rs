@@ -1,13 +1,15 @@
+pub mod ai;
 pub mod config;
 pub mod net;
 pub mod rendering;
 pub mod room;
 
+use crate::game::ai::Ai;
 use {
     crate::{prelude::*, rng::Rng},
     config::{Config, InputConfig},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
-    net::Net,
+    net::{Client, Server},
     room::{Coord, Room, CELL_SIZE, TOT_CELL_COUNT},
 };
 
@@ -47,6 +49,11 @@ pub struct MyDoor {
     dim: Dim,
 }
 
+pub enum Net {
+    Server { server: Server, ais: PlayerArr<Option<Ai>> },
+    Client(Client),
+}
+
 #[repr(u8)]
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum PlayerColor {
@@ -54,13 +61,6 @@ pub enum PlayerColor {
     Blue = 1,
     Orange = 2,
 }
-#[derive(Debug, Copy, Clone)]
-pub enum PlayerRelation {
-    Predator,
-    Prey,
-    Identity,
-}
-
 struct Rect {
     center: Pos,
     size: Size,
@@ -77,7 +77,6 @@ pub struct GameState {
     // rendering
     pub tex_id: TexId,
     pub draw_infos: [DrawInfo; NUM_DRAW_INFOS], // four replicas of all instances to pan the maze indefinitely
-    // network
     pub net: Net,
     pub local_rng: Rng,
 }
@@ -110,8 +109,21 @@ impl Default for AxisPressingState {
         AxisPressingState { map: SignMap::new([ElementState::Released; 2]) }
     }
 }
+struct PrettyPos {
+    pos: Pos,
+}
 
 //////////////////////////
+impl std::fmt::Debug for PrettyPos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let e_iter = Dim::iter_domain().map(move |dim| {
+            let val: i16 = self.pos[dim].into();
+            let val = val as f32 / CELL_SIZE[dim] as f32;
+            (dim, val)
+        });
+        f.debug_map().entries(e_iter).finish()
+    }
+}
 impl MyDoorIndexSet {
     const BIT_MASK: u16 = !((!0u16) << NUM_MY_DOORS);
     pub const FULL: Self = Self { bits: Self::BIT_MASK };
@@ -151,21 +163,9 @@ impl PlayerColor {
     pub fn iter_domain() -> impl Iterator<Item = Self> {
         std::array::IntoIter::new([Self::Black, Self::Blue, Self::Orange])
     }
-    pub fn relation_to(self, other: Self) -> PlayerRelation {
-        if self == other {
-            PlayerRelation::Identity
-        } else if self == other.prey() {
-            PlayerRelation::Prey
-        } else {
-            PlayerRelation::Predator
-        }
-    }
-    pub fn related_by(self, rl: PlayerRelation) -> Self {
-        match rl {
-            PlayerRelation::Identity => self,
-            PlayerRelation::Prey => self.prey(),
-            PlayerRelation::Predator => self.prey().prey(),
-        }
+    #[inline]
+    pub fn predator(self) -> Self {
+        self.prey().prey()
     }
     #[inline]
     pub fn prey(self) -> Self {
@@ -266,6 +266,20 @@ impl Room {
     }
 }
 impl GameState {
+    fn update_net_and_ais(&mut self) {
+        match &mut self.net {
+            Net::Server { server, ais } => {
+                for col in PlayerColor::iter_domain() {
+                    if let Some(ai) = &mut ais[col] {
+                        self.world.entities.players[col].vel =
+                            ai.update(&self.world, &mut self.local_rng);
+                    }
+                }
+                server.update(self.controlling, &mut self.world.entities)
+            }
+            Net::Client(client) => client.update(self.controlling, &mut self.world.entities),
+        }
+    }
     fn move_and_collide(&mut self) {
         // player movement
         for player in &mut self.world.entities.players {
@@ -281,14 +295,14 @@ impl GameState {
             }
         }
 
-        if let Some(rng) = self.net.server_rng() {
+        if let Net::Server { .. } = &self.net {
             let e = &mut self.world.entities;
             // player -> player collision
             for predator in PlayerColor::iter_domain() {
                 let prey = predator.prey();
                 let rect = Rect { center: e.players[prey].pos, size: PLAYER_SIZE };
                 if rect.contains(e.players[predator].pos) {
-                    e.players[prey].pos = e.random_free_space(rng);
+                    e.players[prey].pos = e.random_free_space(&mut self.local_rng);
                 }
             }
 
@@ -302,8 +316,8 @@ impl GameState {
                         size: (PLAYER_SIZE + TELEPORTER_SIZE).map(|val| val / 2u16),
                     };
                     if rect.contains(player_pos) {
-                        e.players[i].pos = e.random_free_space(rng);
-                        e.teleporters[j] = e.random_free_space(rng);
+                        e.players[i].pos = e.random_free_space(&mut self.local_rng);
+                        e.teleporters[j] = e.random_free_space(&mut self.local_rng);
                     }
                 }
             }
@@ -356,7 +370,18 @@ impl GameState {
             let image_bytes = include_bytes!("spritesheet.png");
             &gfx_2020::load_texture_from_bytes(image_bytes).expect("Failed to decode png!")
         });
-        let (net, world, controlling) = Net::new(config);
+        let (net, world, controlling) = if config.server_mode {
+            let (server, world, controlling) = Server::new(&config.if_server);
+            let mut ais = PlayerArr::<Option<Ai>>::default();
+            let ai_color = controlling.predator();
+            ais[ai_color] = Some(Ai::new(ai_color));
+            let net = Net::Server { server, ais };
+            (net, world, controlling)
+        } else {
+            let (client, world, controlling) = Client::new(&config.if_client);
+            let net = Net::Client(client);
+            (net, world, controlling)
+        };
         let mut local_rng = Rng::new_seeded(Rng::random_seed());
         let mut state = GameState {
             my_doors: world.room.random_new_my_doors(&mut local_rng),
@@ -398,7 +423,7 @@ impl DrivesMainLoop for GameState {
 
     fn update<B: Backend>(&mut self, renderer: &mut Renderer<B>) -> Proceed {
         self.move_and_collide();
-        self.net.update(self.controlling, &mut self.world.entities);
+        self.update_net_and_ais();
         self.update_vertex_buffers(renderer);
         self.update_view_transforms();
         Ok(())

@@ -5,7 +5,7 @@ authors = ["Christopher Esterhuyse <christopher.esterhuyse@gmail.com>"]
 edition = "2018"
 
 [features]
-default = []
+default = ["vulkan"]
 metal = ["gfx-backend-metal"]
 dx11 = ["gfx-backend-dx11"]
 dx12 = ["gfx-backend-dx12"]

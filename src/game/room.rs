@@ -9,6 +9,7 @@ use {
 };
 
 pub const ROOM_SIZE: DimMap<u32> = DimMap::new([WrapInt::DOMAIN_SIZE; 2]);
+pub const HALF_ROOM_SIZE: Size = DimMap::new([(ROOM_SIZE.arr[0] / 2) as u16; 2]);
 pub const CELL_COUNTS: DimMap<u8> = DimMap::new([8, 8]);
 pub const TOT_CELL_COUNT: u16 = CELL_COUNTS.arr[0] as u16 * CELL_COUNTS.arr[1] as u16;
 pub const CELL_SIZE: Size = Size::new([
@@ -23,7 +24,7 @@ pub const HALF_CELL_SIZE: Size = CELL_SIZE.scalar_div(2);
 pub struct Room {
     pub wall_sets: DimMap<BitSet>,
 }
-#[derive(Default, Hash, Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Default, Hash, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
     // invariant: top_left corner
     pos: Pos,
@@ -136,7 +137,7 @@ impl Room {
             X => {
                 // H walls! search grid 3 wide and 2 high
                 pos[Y] -= HALF_CELL_SIZE[Y];
-                let a = Coord::from_pos(pos);
+                let a = Coord::from_pos_flooring(pos);
                 let b = a.stepped(Down);
                 /*
                 [. a .]
@@ -147,7 +148,7 @@ impl Room {
             Y => {
                 // V walls! search grid 2 wide and 3 high
                 pos[X] -= HALF_CELL_SIZE[X];
-                let a = Coord::from_pos(pos);
+                let a = Coord::from_pos_flooring(pos);
                 let b = a.stepped(Right);
                 /*
                 [. .]
@@ -161,6 +162,16 @@ impl Room {
 }
 
 impl Coord {
+    pub fn stepped_in_room(self, room: &Room, dir: Direction) -> Option<Self> {
+        let dest = self.stepped(dir);
+        let cwi = dir.crosses_wall_info();
+        let bit_index = if cwi.managed_by_src { self } else { dest }.bit_index();
+        if room.wall_sets[cwi.dim].contains(bit_index) {
+            None
+        } else {
+            Some(dest)
+        }
+    }
     #[inline]
     pub fn stepped(mut self, dir: Direction) -> Self {
         self.pos[dir.dim()] += dir.sign() * CELL_SIZE[dir.dim()] as i16;
@@ -173,13 +184,15 @@ impl Coord {
     pub fn center_pos(self) -> Pos {
         self.corner_pos() + HALF_CELL_SIZE.map(WrapInt::from)
     }
-    pub fn from_pos(mut pos: Pos) -> Self {
-        // FLOOR
+    pub fn from_pos_flooring(mut pos: Pos) -> Self {
         for dim in Dim::iter_domain() {
             let val: u16 = pos[dim].into();
             pos[dim] = (val / CELL_SIZE[dim] * CELL_SIZE[dim]).into();
         }
         Self { pos }
+    }
+    pub fn from_pos_rounding(pos: Pos) -> Self {
+        Self::from_pos_flooring(pos + HALF_CELL_SIZE.map(From::from))
     }
     //////////////////////
     pub fn random(rng: &mut Rng) -> Self {
@@ -197,5 +210,16 @@ impl Coord {
         let x = f(X);
         let y = f(Y);
         BitIndex(y * CELL_COUNTS[X] as u16 + x)
+    }
+}
+
+impl std::fmt::Debug for Coord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        DimMap::new_xy(
+            Into::<u16>::into(self.pos[X]) / CELL_SIZE[X],
+            Into::<u16>::into(self.pos[Y]) / CELL_SIZE[Y],
+        )
+        .arr
+        .fmt(f)
     }
 }

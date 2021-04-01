@@ -3,14 +3,23 @@ use {
     core::ops::{Add, AddAssign, Neg, Sub, SubAssign},
 };
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize,
+)]
 pub struct WrapInt(i16);
 
 ///////////////////////////////////////////
 impl WrapInt {
     pub const DOMAIN_SIZE: u32 = 1 << 16;
     pub fn distance_from_zero(self) -> u16 {
-        unsafe { core::mem::transmute(self.0.wrapping_abs()) }
+        self.0.unsigned_abs()
+    }
+    pub fn sign(self) -> Option<Sign> {
+        match self.0 {
+            0 => None,
+            x if x < 0 => Some(Negative),
+            _ => Some(Positive),
+        }
     }
 }
 impl From<i16> for WrapInt {
@@ -84,18 +93,5 @@ where
 {
     fn sub_assign(&mut self, rhs: T) {
         *self = *self - rhs;
-    }
-}
-
-// TODO test
-impl PartialOrd for WrapInt {
-    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
-        let me_relative = *self - *rhs;
-        match me_relative.0 {
-            0 => Some(Ordering::Equal),
-            i16::MIN => None,
-            x if x < 0 => Some(Ordering::Less),
-            _otherwise => Some(Ordering::Greater),
-        }
     }
 }
