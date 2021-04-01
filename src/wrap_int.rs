@@ -10,6 +10,7 @@ pub struct WrapInt(i16);
 
 ///////////////////////////////////////////
 impl WrapInt {
+    pub const ZERO: Self = Self(0);
     pub const DOMAIN_SIZE: u32 = 1 << 16;
     pub fn distance_from_zero(self) -> u16 {
         self.0.unsigned_abs()

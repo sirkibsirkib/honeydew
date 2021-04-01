@@ -27,9 +27,7 @@ pub enum Sign {
     Negative,
 }
 
-#[derive(
-    PartialOrd, Ord, Eq, PartialEq, Hash, Debug, Copy, Clone, Default, Serialize, Deserialize,
-)]
+#[derive(Eq, PartialEq, Hash, Debug, Copy, Clone, Default, Serialize, Deserialize)]
 pub struct DimMap<T> {
     pub arr: [T; 2],
 }
@@ -219,6 +217,16 @@ impl Direction {
         match self {
             Up | Left => Negative,
             Down | Right => Positive,
+        }
+    }
+}
+impl<T: PartialOrd> PartialOrd for DimMap<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let f = |dim| self[dim].partial_cmp(&other[dim]);
+        match [f(X), f(Y)] {
+            [a, b] if a == b => a,
+            [Some(Ordering::Equal), o] | [o, Some(Ordering::Equal)] => o,
+            _ => None,
         }
     }
 }

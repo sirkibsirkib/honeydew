@@ -95,12 +95,15 @@ impl GameState {
                     }
                 }
             }
-            [
-                -s, //yas
-                -s + [0., ROOM_SIZE[Y] as f32].into(),
-                -s + [ROOM_SIZE[X] as f32, 0.].into(),
-                -s + [ROOM_SIZE[X] as f32, ROOM_SIZE[Y] as f32].into(),
-            ]
+            let mut ret = [-s; NUM_DRAW_INFOS as usize];
+            let two = 0..2;
+            for i in two.clone().map(|i| i * 2) {
+                ret[i].x += ROOM_SIZE[X] as f32;
+            }
+            for i in two.clone().map(|i| i + 2) {
+                ret[i].y += ROOM_SIZE[Y] as f32;
+            }
+            ret
         };
         for (draw_info, pos_vec2) in self.draw_infos.iter_mut().zip(translations.iter()) {
             draw_info.view_transform =

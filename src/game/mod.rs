@@ -295,7 +295,7 @@ impl GameState {
             }
         }
 
-        if let Net::Server { .. } = &self.net {
+        if let Net::Server { ais, .. } = &mut self.net {
             let e = &mut self.world.entities;
             // player -> player collision
             for predator in PlayerColor::iter_domain() {
@@ -303,6 +303,9 @@ impl GameState {
                 let rect = Rect { center: e.players[prey].pos, size: PLAYER_SIZE };
                 if rect.contains(e.players[predator].pos) {
                     e.players[prey].pos = e.random_free_space(&mut self.local_rng);
+                    if let Some(ai) = &mut ais[prey] {
+                        ai.i_was_moved();
+                    }
                 }
             }
 
@@ -318,6 +321,9 @@ impl GameState {
                     if rect.contains(player_pos) {
                         e.players[i].pos = e.random_free_space(&mut self.local_rng);
                         e.teleporters[j] = e.random_free_space(&mut self.local_rng);
+                        if let Some(ai) = &mut ais[i] {
+                            ai.i_was_moved();
+                        }
                     }
                 }
             }
@@ -373,8 +379,9 @@ impl GameState {
         let (net, world, controlling) = if config.server_mode {
             let (server, world, controlling) = Server::new(&config.if_server);
             let mut ais = PlayerArr::<Option<Ai>>::default();
-            let ai_color = controlling.predator();
-            ais[ai_color] = Some(Ai::new(ai_color));
+            for &col in [controlling.predator()].iter() {
+                ais[col] = Some(Ai::new(col));
+            }
             let net = Net::Server { server, ais };
             (net, world, controlling)
         } else {

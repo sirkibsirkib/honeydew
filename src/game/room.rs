@@ -9,6 +9,7 @@ use {
 };
 
 pub const ROOM_SIZE: DimMap<u32> = DimMap::new([WrapInt::DOMAIN_SIZE; 2]);
+pub const ZERO_SIZE: Size = DimMap::new([0; 2]);
 pub const HALF_ROOM_SIZE: Size = DimMap::new([(ROOM_SIZE.arr[0] / 2) as u16; 2]);
 pub const CELL_COUNTS: DimMap<u8> = DimMap::new([8, 8]);
 pub const TOT_CELL_COUNT: u16 = CELL_COUNTS.arr[0] as u16 * CELL_COUNTS.arr[1] as u16;
@@ -177,13 +178,18 @@ impl Coord {
         self.pos[dir.dim()] += dir.sign() * CELL_SIZE[dir.dim()] as i16;
         self
     }
+
+    // N -> N.0
     /////////////////////
     pub fn corner_pos(self) -> Pos {
         self.pos
     }
+
+    // N -> N.5
     pub fn center_pos(self) -> Pos {
         self.corner_pos() + HALF_CELL_SIZE.map(WrapInt::from)
     }
+    // N.0 .. N.1 -> N
     pub fn from_pos_flooring(mut pos: Pos) -> Self {
         for dim in Dim::iter_domain() {
             let val: u16 = pos[dim].into();
@@ -191,6 +197,7 @@ impl Coord {
         }
         Self { pos }
     }
+    // N.5 .. (N+1).5 -> N
     pub fn from_pos_rounding(pos: Pos) -> Self {
         Self::from_pos_flooring(pos + HALF_CELL_SIZE.map(From::from))
     }
@@ -216,8 +223,8 @@ impl Coord {
 impl std::fmt::Debug for Coord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         DimMap::new_xy(
-            Into::<u16>::into(self.pos[X]) / CELL_SIZE[X],
-            Into::<u16>::into(self.pos[Y]) / CELL_SIZE[Y],
+            Into::<i16>::into(self.pos[X]) as i32 / CELL_SIZE[X] as i32,
+            Into::<i16>::into(self.pos[Y]) as i32 / CELL_SIZE[Y] as i32,
         )
         .arr
         .fmt(f)
