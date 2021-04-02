@@ -272,10 +272,12 @@ impl GameState {
                             ai.update(&self.world, &mut self.local_rng);
                     }
                 }
-                let new_connection_handler = |color| {
+
+                let new_connection_callback = |color: PlayerColor, player: &mut Player| {
                     ais[color] = None;
+                    player.vel = Vel::default();
                 };
-                server.update(self.controlling, &mut self.world.entities, new_connection_handler)
+                server.update(self.controlling, &mut self.world.entities, new_connection_callback)
             }
             Net::Client(client) => client.update(self.controlling, &mut self.world.entities),
         }
