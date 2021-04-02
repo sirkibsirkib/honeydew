@@ -9,21 +9,51 @@ pub const INDICES: u16 = crate::game::room::TOT_CELL_COUNT;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct BitIndex(pub(crate) u16); // invariant: < INDICES
 
-pub struct BitSet {
+pub struct BitIndexSet {
     // invariant: bits outside of range 0..INDICES are zero
     words: [usize; Self::WORDS as usize],
 }
-pub struct BitSetIter<'a> {
-    bit_set: &'a BitSet,
+pub struct BitIndexSetIter<'a> {
+    bit_set: &'a BitIndexSet,
     cached_word: usize,
     next_idx_of: u16,
 }
 struct SplitBitIndex {
-    idx_in: usize, // invariant: < BitSet::WORD_SIZE
-    idx_of: usize, // invariant: < BitSet::WORDS
+    idx_in: usize, // invariant: < BitIndexSet::WORD_SIZE
+    idx_of: usize, // invariant: < BitIndexSet::WORDS
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct FullBitIndexMap<T> {
+    data: [T; INDICES as usize],
 }
 ///////////////////////////////////////////////////////////////
-impl Default for BitSet {
+impl<T> FullBitIndexMap<T> {
+    pub fn new_copied(t: T) -> Self
+    where
+        T: Copy,
+    {
+        Self { data: [t; INDICES as usize] }
+    }
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.data.iter_mut()
+    }
+    pub fn values(&self) -> impl Iterator<Item = &T> {
+        self.data.iter()
+    }
+}
+impl<T> Index<BitIndex> for FullBitIndexMap<T> {
+    type Output = T;
+    fn index(&self, bi: BitIndex) -> &T {
+        &self.data[bi.0 as usize]
+    }
+}
+impl<T> IndexMut<BitIndex> for FullBitIndexMap<T> {
+    fn index_mut(&mut self, bi: BitIndex) -> &mut T {
+        &mut self.data[bi.0 as usize]
+    }
+}
+impl Default for BitIndexSet {
     fn default() -> Self {
         Self { words: [0; Self::WORDS as usize] }
     }
@@ -31,16 +61,16 @@ impl Default for BitSet {
 impl SplitBitIndex {
     #[inline]
     fn unsplit(self) -> BitIndex {
-        BitIndex(self.idx_of as u16 * BitSet::WORD_SIZE + self.idx_in as u16)
+        BitIndex(self.idx_of as u16 * BitIndexSet::WORD_SIZE + self.idx_in as u16)
     }
 }
 const fn div_round_up(x: u16, y: u16) -> u16 {
     (x + y - 1) / y
 }
 
-impl core::iter::FromIterator<BitIndex> for BitSet {
+impl core::iter::FromIterator<BitIndex> for BitIndexSet {
     fn from_iter<I: IntoIterator<Item = BitIndex>>(iter: I) -> Self {
-        let mut bs = BitSet::default();
+        let mut bs = BitIndexSet::default();
         for i in iter {
             bs.insert(i);
         }
@@ -52,16 +82,20 @@ impl BitIndex {
     #[inline]
     fn split(self) -> SplitBitIndex {
         SplitBitIndex {
-            idx_of: (self.0 / BitSet::WORD_SIZE) as usize,
-            idx_in: (self.0 % BitSet::WORD_SIZE) as usize,
+            idx_of: (self.0 / BitIndexSet::WORD_SIZE) as usize,
+            idx_in: (self.0 % BitIndexSet::WORD_SIZE) as usize,
         }
+    }
+    #[inline]
+    pub fn iter_domain() -> impl Iterator<Item = Self> {
+        (0..INDICES).map(Self)
     }
     pub fn random(rng: &mut Rng) -> Self {
         Self(rng.fastrand_rng.u16(0..INDICES))
     }
 }
 
-impl BitSet {
+impl BitIndexSet {
     const WORD_SIZE: u16 = core::mem::size_of::<usize>() as u16 * 8;
     const WORDS: u16 = div_round_up(INDICES, Self::WORD_SIZE);
     fn word_and_mask(&self, bit_index: BitIndex) -> (usize, usize) {
@@ -81,9 +115,9 @@ impl BitSet {
         (word, 1 << idx_in)
     }
     fn restore_invariant(&mut self) {
-        const DEAD_MSB: u16 = BitSet::WORDS * BitSet::WORD_SIZE - INDICES;
+        const DEAD_MSB: u16 = BitIndexSet::WORDS * BitIndexSet::WORD_SIZE - INDICES;
         if DEAD_MSB > 0 {
-            const LAST_WORD_IDX: u16 = BitSet::WORDS - 1;
+            const LAST_WORD_IDX: u16 = BitIndexSet::WORDS - 1;
             self.words[LAST_WORD_IDX as usize] &= !0 >> DEAD_MSB as usize;
         }
     }
@@ -115,18 +149,18 @@ impl BitSet {
         }
         self.restore_invariant()
     }
-    pub fn iter(&self) -> BitSetIter {
-        BitSetIter { bit_set: self, cached_word: 0, next_idx_of: 0 }
+    pub fn iter(&self) -> BitIndexSetIter {
+        BitIndexSetIter { bit_set: self, cached_word: 0, next_idx_of: 0 }
     }
     pub fn len(&self) -> u16 {
         let s: u32 = self.words.iter().copied().map(usize::count_ones).sum();
         s as u16
     }
 }
-impl Iterator for BitSetIter<'_> {
+impl Iterator for BitIndexSetIter<'_> {
     type Item = BitIndex;
     fn next(&mut self) -> Option<Self::Item> {
-        while self.cached_word == 0 && self.next_idx_of < BitSet::WORDS {
+        while self.cached_word == 0 && self.next_idx_of < BitIndexSet::WORDS {
             // try fill the cached word
             self.cached_word = self.bit_set.words[self.next_idx_of as usize];
             self.next_idx_of += 1;

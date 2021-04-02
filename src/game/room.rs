@@ -1,6 +1,6 @@
 use {
     crate::{
-        bit_set::{self, BitIndex, BitSet},
+        bit_set::{self, BitIndex, BitIndexSet},
         prelude::*,
         rng::Rng,
         Dim,
@@ -11,7 +11,7 @@ use {
 pub const ROOM_SIZE: DimMap<u32> = DimMap::new([WrapInt::DOMAIN_SIZE; 2]);
 pub const ZERO_SIZE: Size = DimMap::new([0; 2]);
 pub const HALF_ROOM_SIZE: Size = DimMap::new([(ROOM_SIZE.arr[0] / 2) as u16; 2]);
-pub const CELL_COUNTS: DimMap<u8> = DimMap::new([8, 8]);
+pub const CELL_COUNTS: DimMap<u8> = DimMap::new([16, 8]);
 pub const TOT_CELL_COUNT: u16 = CELL_COUNTS.arr[0] as u16 * CELL_COUNTS.arr[1] as u16;
 pub const CELL_SIZE: Size = Size::new([
     (ROOM_SIZE.arr[0] / CELL_COUNTS.arr[0] as u32) as u16,
@@ -23,7 +23,7 @@ pub const HALF_CELL_SIZE: Size = CELL_SIZE.scalar_div(2);
 // # Data types
 
 pub struct Room {
-    pub wall_sets: DimMap<BitSet>,
+    pub wall_sets: DimMap<BitIndexSet>,
 }
 #[derive(Default, Hash, Copy, Clone, Eq, PartialEq)]
 pub struct Coord {
@@ -31,8 +31,8 @@ pub struct Coord {
     pos: Pos,
 }
 struct IncompleteRoom {
-    wall_sets: DimMap<BitSet>,
-    visited: BitSet,
+    wall_sets: DimMap<BitIndexSet>,
+    visited: BitIndexSet,
 }
 struct CrossesWallInfo {
     dim: Dim,
@@ -101,7 +101,7 @@ impl Room {
     pub fn new(rng: &mut Rng) -> Self {
         let mut incomplete_room = IncompleteRoom {
             visited: Default::default(),
-            wall_sets: DimMap::new([BitSet::full(), BitSet::full()]),
+            wall_sets: DimMap::new([BitIndexSet::full(), BitIndexSet::full()]),
         };
 
         let mut at = Coord::random(rng);
@@ -163,6 +163,7 @@ impl Room {
 }
 
 impl Coord {
+    pub const DOMAIN_SIZE: u16 = TOT_CELL_COUNT;
     pub fn stepped_in_room(self, room: &Room, dir: Direction) -> Option<Self> {
         let dest = self.stepped(dir);
         let cwi = dir.crosses_wall_info();

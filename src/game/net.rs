@@ -173,7 +173,7 @@ impl Server {
     }
     pub fn update(&mut self, my_color: PlayerColor, entities: &mut Entities) {
         // I am the server!
-        let peer_colors = std::array::IntoIter::new(my_color.peers());
+        let peer_colors = std::array::IntoIter::new(my_color.predator_prey());
         while let Some((msg, sender_addr)) = self.recv_from() {
             match msg {
                 Msg::CtsHello { preferred_color } => {
@@ -189,7 +189,7 @@ impl Server {
                         })
                         // try 2: color of a newly-filled client slot
                         .or_else(|| {
-                            let [b, c] = preferred_color.peers();
+                            let [b, c] = preferred_color.predator_prey();
                             let choices = [preferred_color, b, c];
                             ArrIter::new(choices)
                                 .find(|&color| color != my_color && self.clients[color].is_none())

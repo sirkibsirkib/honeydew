@@ -50,7 +50,7 @@ pub struct MyDoor {
 }
 
 pub enum Net {
-    Server { server: Server, ais: PlayerArr<Option<Ai>> },
+    Server { server: Server, ais: PlayerArr<Option<Box<dyn Ai>>> },
     Client(Client),
 }
 
@@ -156,9 +156,8 @@ impl Into<usize> for PlayerColor {
     }
 }
 impl PlayerColor {
-    pub fn peers(self) -> [Self; 2] {
-        let prey = self.prey();
-        [prey.prey(), prey]
+    pub fn predator_prey(self) -> [Self; 2] {
+        [self.predator(), self.prey()]
     }
     pub fn iter_domain() -> impl Iterator<Item = Self> {
         std::array::IntoIter::new([Self::Black, Self::Blue, Self::Orange])
@@ -281,6 +280,7 @@ impl GameState {
         }
     }
     fn move_and_collide(&mut self) {
+        // TODO if I am inside a door, mutate vel s.t. I continue going through
         // player movement
         for player in &mut self.world.entities.players {
             let move_size = if player.vel[X].is_some() && player.vel[Y].is_some() {
@@ -376,11 +376,13 @@ impl GameState {
             let image_bytes = include_bytes!("spritesheet.png");
             &gfx_2020::load_texture_from_bytes(image_bytes).expect("Failed to decode png!")
         });
+        let mut local_rng = Rng::new_seeded(Rng::random_seed());
         let (net, world, controlling) = if config.server_mode {
             let (server, world, controlling) = Server::new(&config.if_server);
-            let mut ais = PlayerArr::<Option<Ai>>::default();
-            for &col in [controlling.predator()].iter() {
-                ais[col] = Some(Ai::new(col));
+            let mut ais = PlayerArr::<Option<Box<dyn Ai>>>::default();
+            for &col in controlling.predator_prey().iter() {
+                use ai::{AiExt, QualityClimbAi};
+                ais[col] = Some(QualityClimbAi::new(col, &mut local_rng));
             }
             let net = Net::Server { server, ais };
             (net, world, controlling)
@@ -389,7 +391,6 @@ impl GameState {
             let net = Net::Client(client);
             (net, world, controlling)
         };
-        let mut local_rng = Rng::new_seeded(Rng::random_seed());
         let mut state = GameState {
             my_doors: world.room.random_new_my_doors(&mut local_rng),
             currently_inside_doors: Default::default(),
