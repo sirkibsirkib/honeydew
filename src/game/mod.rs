@@ -69,7 +69,6 @@ pub struct GameState {
     pub world: World,
     pub my_doors: [MyDoor; NUM_MY_DOORS as usize],
     pub currently_inside_doors: MyDoorIndexSet,
-    pub my_doors_just_moved: MyDoorIndexSet, // written by GameState::move_and_collide, read by GameState::update_my_door_transforms
     // controlling
     pub controlling: PlayerColor,
     pub pressing_state: PressingState,
@@ -126,7 +125,6 @@ impl std::fmt::Debug for PrettyPos {
 }
 impl MyDoorIndexSet {
     const BIT_MASK: u16 = !((!0u16) << NUM_MY_DOORS);
-    pub const FULL: Self = Self { bits: Self::BIT_MASK };
     pub const fn without(self, other: Self) -> Self {
         Self { bits: self.bits & (!other.bits) & Self::BIT_MASK }
     }
@@ -274,7 +272,10 @@ impl GameState {
                             ai.update(&self.world, &mut self.local_rng);
                     }
                 }
-                server.update(self.controlling, &mut self.world.entities)
+                let new_connection_handler = |color| {
+                    ais[color] = None;
+                };
+                server.update(self.controlling, &mut self.world.entities, new_connection_handler)
             }
             Net::Client(client) => client.update(self.controlling, &mut self.world.entities),
         }
@@ -363,13 +364,13 @@ impl GameState {
                 }
             }
         }
-        self.my_doors_just_moved = self.currently_inside_doors.without(new_currently_inside_doors);
+        let my_doors_just_moved = self.currently_inside_doors.without(new_currently_inside_doors);
         // relocate doors just moved
-        for just_left_door_index in self.my_doors_just_moved.into_iter() {
+        for just_left_door_index in my_doors_just_moved.into_iter() {
             self.my_doors[just_left_door_index] =
                 self.world.room.random_new_my_door(&mut self.local_rng, &self.my_doors);
         }
-        self.currently_inside_doors = new_currently_inside_doors; // update for next tick
+        self.currently_inside_doors = new_currently_inside_doors;
     }
     pub fn new<B: Backend>(renderer: &mut Renderer<B>, config: &Config) -> Self {
         let tex_id = renderer.load_texture({
@@ -380,9 +381,11 @@ impl GameState {
         let (net, world, controlling) = if config.server_mode {
             let (server, world, controlling) = Server::new(&config.if_server);
             let mut ais = PlayerArr::<Option<Box<dyn Ai>>>::default();
-            for &col in controlling.predator_prey().iter() {
+            for &col in config.if_server.ai_enabled.iter() {
                 use ai::{AiExt, QualityClimbAi};
-                ais[col] = Some(QualityClimbAi::new(col, &mut local_rng));
+                if ais[col].is_none() && col != controlling {
+                    ais[col] = Some(QualityClimbAi::new(col, &mut local_rng));
+                }
             }
             let net = Net::Server { server, ais };
             (net, world, controlling)
@@ -394,7 +397,6 @@ impl GameState {
         let mut state = GameState {
             my_doors: world.room.random_new_my_doors(&mut local_rng),
             currently_inside_doors: Default::default(),
-            my_doors_just_moved: MyDoorIndexSet::FULL,
             net,
             world,
             pressing_state: Default::default(),

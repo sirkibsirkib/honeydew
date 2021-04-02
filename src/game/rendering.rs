@@ -27,6 +27,7 @@ pub const VIEW_SIZE: Size = CELL_SIZE.scalar_mul(4);
 pub const ENABLE_WRAP_DRAW: bool = true;
 
 /////////////////////////////////
+
 pub fn render_config() -> RendererConfig<'static> {
     RendererConfig {
         init: RendererInitConfig {
@@ -121,12 +122,11 @@ impl GameState {
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
     fn update_my_door_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        for my_door_idx in self.my_doors_just_moved.into_iter() {
-            let MyDoor { coord, dim } = self.my_doors[my_door_idx];
-            let t = Mat4::from_translation(GameState::wall_pos(coord, dim).to_vec2().extend(0.)) // ABOVE WALLS
-                * Mat4::from_scale(WALL_SIZE[dim].to_vec2().extend(1.));
-            renderer.write_vertex_buffer(INSTANCE_RANGE_MY_DOORS.start, std::iter::once(t));
-        }
+        let iter = self.my_doors.iter().map(|&MyDoor { dim, coord }| {
+            Mat4::from_translation(GameState::wall_pos(coord, dim).to_vec2().extend(0.)) // ABOVE WALLS
+                * Mat4::from_scale(WALL_SIZE[dim].to_vec2().extend(1.))
+        });
+        renderer.write_vertex_buffer(INSTANCE_RANGE_MY_DOORS.start, iter);
     }
     fn update_player_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
         let iter = self.world.entities.players.iter().map(move |player| {

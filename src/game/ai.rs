@@ -208,7 +208,7 @@ impl QualityClimbAi {
     fn update_model_and_goal(&mut self, world: &World, rng: &mut Rng) {
         // coord_of_player(world, self.my_color.prey())
         let me_at = coord_of_player(world, self.my_color);
-        if rng.gen_bits(3) == 0 {
+        if rng.gen_bits(2) == 0 {
             let mut try_update_estimated_at = |color, estimated_at: &mut Coord| {
                 let real_coord = coord_of_player(world, color);
                 let dist = coord_dist([real_coord, me_at]);
@@ -223,12 +223,12 @@ impl QualityClimbAi {
             try_update_estimated_at(self.my_color.prey(), &mut self.prey_maybe_at);
             try_update_estimated_at(self.my_color.predator(), &mut self.predator_maybe_at);
         }
-        if rng.gen_bits(3) == 0 {
+        if rng.gen_bits(2) == 0 {
             // recompute pred/prey sink trees
             self.sink_to_prey = Self::sink_map_to(world, self.prey_maybe_at, true);
             self.sink_to_predator = Self::sink_map_to(world, self.predator_maybe_at, true);
         }
-        if rng.gen_bits(6) == 0 {
+        if rng.gen_bits(4) == 0 {
             // recompute teleporter sink trees
             self.sink_to_teleporters = world
                 .entities

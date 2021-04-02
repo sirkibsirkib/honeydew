@@ -171,7 +171,12 @@ impl Server {
             }
         })
     }
-    pub fn update(&mut self, my_color: PlayerColor, entities: &mut Entities) {
+    pub fn update(
+        &mut self,
+        my_color: PlayerColor,
+        entities: &mut Entities,
+        mut new_connection: impl FnMut(PlayerColor),
+    ) {
         // I am the server!
         let peer_colors = std::array::IntoIter::new(my_color.predator_prey());
         while let Some((msg, sender_addr)) = self.recv_from() {
@@ -194,6 +199,7 @@ impl Server {
                             ArrIter::new(choices)
                                 .find(|&color| color != my_color && self.clients[color].is_none())
                                 .map(|color| {
+                                    new_connection(color);
                                     self.clients[color] = Some(ServerClient {
                                         addr: sender_addr,
                                         last_client_timestamp: timestamp,

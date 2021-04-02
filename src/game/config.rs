@@ -32,6 +32,7 @@ pub struct IfServer {
     pub server_addr: SocketAddrV4,
     pub player_color: PlayerColor,
     pub room_seed: Option<u64>,
+    pub ai_enabled: Vec<PlayerColor>,
 }
 
 impl Config {
@@ -48,11 +49,16 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         let server_addr = SocketAddrV4::new(std::net::Ipv4Addr::LOCALHOST, 8000);
-        use VirtualKeyCode as Vkc;
+        use {PlayerColor as Pc, VirtualKeyCode as Vkc};
         Self {
             server_mode: true,
             if_client: IfClient { preferred_color: PlayerColor::Black, server_addr },
-            if_server: IfServer { room_seed: None, player_color: PlayerColor::Black, server_addr },
+            if_server: IfServer {
+                room_seed: None,
+                player_color: PlayerColor::Black,
+                server_addr,
+                ai_enabled: vec![Pc::Black, Pc::Blue, Pc::Orange],
+            },
             input: InputConfig {
                 up: Vkc::W,
                 down: Vkc::S,
