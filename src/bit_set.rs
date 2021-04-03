@@ -35,12 +35,6 @@ impl<T> FullBitIndexMap<T> {
     {
         Self { data: [t; INDICES as usize] }
     }
-    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut T> {
-        self.data.iter_mut()
-    }
-    pub fn values(&self) -> impl Iterator<Item = &T> {
-        self.data.iter()
-    }
 }
 impl<T> Index<BitIndex> for FullBitIndexMap<T> {
     type Output = T;

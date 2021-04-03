@@ -4,9 +4,9 @@ pub mod net;
 pub mod rendering;
 pub mod room;
 
-use crate::game::ai::Ai;
 use {
     crate::{prelude::*, rng::Rng},
+    ai::{Ai, AiExt, SinkAi},
     config::{Config, InputConfig},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
     net::{Client, Server},
@@ -25,6 +25,7 @@ pub const WALL_SIZE: DimMap<Size> = DimMap::new([
     Size::new([CELL_SIZE.arr[0], CELL_SIZE.arr[1] / 7]),
     Size::new([CELL_SIZE.arr[0] / 7, CELL_SIZE.arr[1]]),
 ]);
+pub const ZERO_POS: Pos = Pos::new([WrapInt::ZERO; 2]);
 
 // allows an upper bound for renderer's instance buffers
 pub const NUM_TELEPORTERS: u32 = TOT_CELL_COUNT as u32 / 64;
@@ -51,7 +52,7 @@ pub struct MyDoor {
 }
 
 pub enum Net {
-    Server { server: Server, ais: PlayerArr<Option<Box<dyn Ai>>> },
+    Server { server: Server, ais: PlayerArr<Option<SinkAi>> },
     Client(Client),
 }
 
@@ -125,10 +126,6 @@ impl std::fmt::Debug for PrettyPos {
     }
 }
 impl MyDoorIndexSet {
-    const BIT_MASK: u16 = !((!0u16) << NUM_MY_DOORS);
-    pub const fn without(self, other: Self) -> Self {
-        Self { bits: self.bits & (!other.bits) & Self::BIT_MASK }
-    }
     pub fn inserted(mut self, idx: usize) -> Self {
         self.bits |= 1 << idx;
         self
@@ -138,21 +135,6 @@ impl MyDoorIndexSet {
     }
     pub fn contains(self, idx: usize) -> bool {
         self.inserted(idx) == self
-    }
-    pub fn into_iter(self) -> impl Iterator<Item = usize> {
-        struct SetDrainIter(u16);
-        impl Iterator for SetDrainIter {
-            type Item = usize;
-            fn next(&mut self) -> Option<usize> {
-                if self.0 == 0 {
-                    return None;
-                }
-                let index = self.0.trailing_zeros() as usize;
-                self.0 &= !(1 << index);
-                Some(index)
-            }
-        }
-        SetDrainIter(self.bits)
     }
 }
 
@@ -321,33 +303,36 @@ impl GameState {
         }
 
         if let Net::Server { ais, .. } = &mut self.net {
-            let e = &mut self.world.entities;
             // player -> player collision
             for predator in PlayerColor::iter_domain() {
                 let prey = predator.prey();
-                let rect = Rect { center: e.players[prey].pos, size: PLAYER_SIZE };
-                if rect.contains(e.players[predator].pos) {
-                    e.players[prey].pos = e.random_free_space(&mut self.local_rng);
+                let rect =
+                    Rect { center: self.world.entities.players[prey].pos, size: PLAYER_SIZE };
+                if rect.contains(self.world.entities.players[predator].pos) {
+                    self.world.entities.players[prey].pos =
+                        self.world.entities.random_free_space(&mut self.local_rng);
                     if let Some(ai) = &mut ais[prey] {
-                        ai.i_was_moved();
+                        ai.i_was_moved(&self.world);
                     }
                 }
             }
 
             // player -> teleporter collision
-            for i in 0..e.players.len() {
-                let player_pos = e.players[i].pos;
-                for j in 0..e.teleporters.len() {
-                    let teleporter = e.teleporters[j];
+            for i in 0..self.world.entities.players.len() {
+                let player_pos = self.world.entities.players[i].pos;
+                for j in 0..self.world.entities.teleporters.len() {
+                    let teleporter = self.world.entities.teleporters[j];
                     let rect = Rect {
                         center: teleporter,
                         size: (PLAYER_SIZE + TELEPORTER_SIZE).map(|val| val / 2u16),
                     };
                     if rect.contains(player_pos) {
-                        e.players[i].pos = e.random_free_space(&mut self.local_rng);
-                        e.teleporters[j] = e.random_free_space(&mut self.local_rng);
+                        self.world.entities.players[i].pos =
+                            self.world.entities.random_free_space(&mut self.local_rng);
+                        self.world.entities.teleporters[j] =
+                            self.world.entities.random_free_space(&mut self.local_rng);
                         if let Some(ai) = &mut ais[i] {
-                            ai.i_was_moved();
+                            ai.i_was_moved(&self.world);
                         }
                     }
                 }
@@ -413,11 +398,10 @@ impl GameState {
         let mut local_rng = Rng::new_seeded(Rng::random_seed());
         let (net, world, controlling) = if config.server_mode {
             let (server, world, controlling) = Server::new(&config.if_server);
-            let mut ais = PlayerArr::<Option<Box<dyn Ai>>>::default();
+            let mut ais = PlayerArr::<Option<_>>::default();
             for &col in config.if_server.ai_enabled.iter() {
-                use ai::{AiExt, QualityClimbAi};
                 if ais[col].is_none() && col != controlling {
-                    ais[col] = Some(QualityClimbAi::new(col, &mut local_rng));
+                    ais[col] = Some(SinkAi::new(col, &world, &mut local_rng));
                 }
             }
             let net = Net::Server { server, ais };

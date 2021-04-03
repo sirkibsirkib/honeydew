@@ -1,4 +1,3 @@
-use core::ops::Sub;
 use {
     crate::{
         bit_set::{self, BitIndex, BitIndexSet},
@@ -10,7 +9,7 @@ use {
 };
 
 pub const ROOM_SIZE: DimMap<u32> = DimMap::new([WrapInt::DOMAIN_SIZE; 2]);
-pub const ZERO_SIZE: Size = DimMap::new([0; 2]);
+// pub const ZERO_SIZE: Size = DimMap::new([0; 2]);
 pub const HALF_ROOM_SIZE: Size = DimMap::new([(ROOM_SIZE.arr[0] / 2) as u16; 2]);
 pub const CELL_COUNTS: DimMap<u8> = DimMap::new([16, 8]);
 pub const TOT_CELL_COUNT: u16 = CELL_COUNTS.arr[0] as u16 * CELL_COUNTS.arr[1] as u16;
@@ -164,7 +163,7 @@ impl Room {
 }
 
 impl Coord {
-    pub const DOMAIN_SIZE: u16 = TOT_CELL_COUNT;
+    // pub const DOMAIN_SIZE: u16 = TOT_CELL_COUNT;
     pub fn stepped_in_room(self, room: &Room, dir: Direction) -> Option<Self> {
         let dest = self.stepped(dir);
         let cwi = dir.crosses_wall_info();
@@ -200,9 +199,9 @@ impl Coord {
         Self { pos }
     }
     // N.5 .. (N+1).5 -> N
-    pub fn from_pos_rounding(pos: Pos) -> Self {
-        Self::from_pos_flooring(pos + HALF_CELL_SIZE.map(From::from))
-    }
+    // pub fn from_pos_rounding(pos: Pos) -> Self {
+    //     Self::from_pos_flooring(pos + HALF_CELL_SIZE.map(From::from))
+    // }
     //////////////////////
     pub fn random(rng: &mut Rng) -> Self {
         Self::from_bit_index(BitIndex::random(rng))

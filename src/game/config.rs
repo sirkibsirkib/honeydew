@@ -1,6 +1,6 @@
-use crate::winit::event::VirtualKeyCode;
 use {
     crate::{game::PlayerColor, prelude::*},
+    gfx_2020::winit::event::VirtualKeyCode,
     std::{fs::File, io::Write, net::SocketAddrV4, path::Path},
 };
 
