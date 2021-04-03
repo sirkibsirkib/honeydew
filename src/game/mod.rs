@@ -39,12 +39,13 @@ pub type Size = DimMap<u16>;
 pub type Vel = DimMap<Option<Sign>>;
 pub type PlayerArr<T> = [T; NUM_PLAYERS as usize];
 
-#[derive(Copy, Clone, Default)]
+#[derive(Eq, PartialEq, Copy, Clone, Default)]
 pub struct MyDoorIndexSet {
     bits: u16,
 }
 #[derive(Copy, Clone)]
 pub struct MyDoor {
+    moving_through: Option<Sign>,
     coord: Coord,
     dim: Dim,
 }
@@ -68,7 +69,7 @@ struct Rect {
 pub struct GameState {
     pub world: World,
     pub my_doors: [MyDoor; NUM_MY_DOORS as usize],
-    pub currently_inside_doors: MyDoorIndexSet,
+    // pub currently_inside_doors: MyDoorIndexSet,
     // controlling
     pub controlling: PlayerColor,
     pub pressing_state: PressingState,
@@ -128,8 +129,15 @@ impl MyDoorIndexSet {
     pub const fn without(self, other: Self) -> Self {
         Self { bits: self.bits & (!other.bits) & Self::BIT_MASK }
     }
-    pub fn insert(&mut self, idx: usize) {
+    pub fn inserted(mut self, idx: usize) -> Self {
         self.bits |= 1 << idx;
+        self
+    }
+    pub fn insert(&mut self, idx: usize) {
+        *self = self.inserted(idx)
+    }
+    pub fn contains(self, idx: usize) -> bool {
+        self.inserted(idx) == self
     }
     pub fn into_iter(self) -> impl Iterator<Item = usize> {
         struct SetDrainIter(u16);
@@ -236,7 +244,8 @@ impl Entities {
 
 impl Room {
     fn random_new_my_doors(&self, rng: &mut Rng) -> [MyDoor; NUM_MY_DOORS as usize] {
-        let mut my_doors = [MyDoor { coord: Default::default(), dim: X }; NUM_MY_DOORS as usize];
+        let mut my_doors = [MyDoor { coord: Default::default(), dim: X, moving_through: None };
+            NUM_MY_DOORS as usize];
         for i in 0..NUM_MY_DOORS as usize {
             my_doors[i] = self.random_new_my_door(rng, &my_doors);
         }
@@ -250,13 +259,16 @@ impl Room {
         loop {
             let coord = Coord::random(rng);
             // 1. check if its far away enough
-            let already_exists = my_doors.iter().any(|other| coord == other.coord);
-            if !already_exists {
+            let too_close = my_doors.iter().any(|other| {
+                (coord.corner_pos() - other.coord.corner_pos()).distances_from_zero()
+                    < CELL_SIZE.scalar_mul(2)
+            });
+            if !too_close {
                 let dim_iter = ArrIter::new(if rng.gen_bool() { [X, Y] } else { [Y, X] });
                 if let Some(dim) =
                     dim_iter.filter(|&dim| self.wall_sets[dim].contains(coord.bit_index())).next()
                 {
-                    return MyDoor { coord, dim };
+                    return MyDoor { coord, dim, moving_through: None };
                 }
             }
         }
@@ -273,11 +285,11 @@ impl GameState {
                     }
                 }
 
-                let new_connection_callback = |color: PlayerColor, player: &mut Player| {
+                let new_client_callback = move |color: PlayerColor, entities: &mut Entities| {
                     ais[color] = None;
-                    player.vel = Vel::default();
+                    entities.players[color].vel = Vel::default();
                 };
-                server.update(self.controlling, &mut self.world.entities, new_connection_callback)
+                server.update(self.controlling, &mut self.world.entities, new_client_callback)
             }
             Net::Client(client) => client.update(self.controlling, &mut self.world.entities),
         }
@@ -285,14 +297,24 @@ impl GameState {
     fn move_and_collide(&mut self) {
         // TODO if I am inside a door, mutate vel s.t. I continue going through
         // player movement
-        for player in &mut self.world.entities.players {
-            let move_size = if player.vel[X].is_some() && player.vel[Y].is_some() {
+        for col in PlayerColor::iter_domain() {
+            let player = &mut self.world.entities.players[col];
+            let mut effective_vel = player.vel;
+            if col == self.controlling {
+                // override the player's input vel to continue moving them through the door
+                for my_door in self.my_doors.iter() {
+                    if let Some(sign) = my_door.moving_through {
+                        effective_vel[!my_door.dim] = Some(sign);
+                    }
+                }
+            }
+            let move_size = if effective_vel[X].is_some() && effective_vel[Y].is_some() {
                 MOVE_SIZE_DIAG
             } else {
                 MOVE_SIZE
             };
             for dim in Dim::iter_domain() {
-                if let Some(sign) = player.vel[dim] {
+                if let Some(sign) = effective_vel[dim] {
                     player.pos[dim] += sign * WrapInt::from(move_size[dim]);
                 }
             }
@@ -334,7 +356,7 @@ impl GameState {
 
         // player -> wall collision
         let player = &mut self.world.entities.players[self.controlling];
-        let mut new_currently_inside_doors = MyDoorIndexSet::default(); // still building...
+        let mut moving_through_doors = MyDoorIndexSet::default(); // still building...
         for dim in Dim::iter_domain() {
             for coord in Room::wall_cells_to_check_at(player.pos, dim) {
                 let wall_here = self.world.room.wall_sets[dim].contains(coord.bit_index());
@@ -359,20 +381,29 @@ impl GameState {
                     .map(|(index, _)| index)
                     .next();
 
-                if let Some(my_door_here_idx) = my_door_here_idx {
-                    new_currently_inside_doors.insert(my_door_here_idx);
+                if let Some(i) = my_door_here_idx {
+                    let my_door = &mut self.my_doors[i];
+                    if my_door.moving_through.is_none() {
+                        // moving through door START
+                        my_door.moving_through = Some(if player.pos[!dim] < rect.center[!dim] {
+                            Positive
+                        } else {
+                            Negative
+                        });
+                    }
+                    moving_through_doors.insert(i);
                 } else {
                     player.snap_pos_wrt_vel(&rect);
                 }
             }
         }
-        let my_doors_just_moved = self.currently_inside_doors.without(new_currently_inside_doors);
-        // relocate doors just moved
-        for just_left_door_index in my_doors_just_moved.into_iter() {
-            self.my_doors[just_left_door_index] =
-                self.world.room.random_new_my_door(&mut self.local_rng, &self.my_doors);
+        for i in (0..NUM_MY_DOORS as usize).filter(|&i| !moving_through_doors.contains(i)) {
+            if self.my_doors[i].moving_through.take().is_some() {
+                // moving through door END
+                self.my_doors[i] =
+                    self.world.room.random_new_my_door(&mut self.local_rng, &self.my_doors);
+            }
         }
-        self.currently_inside_doors = new_currently_inside_doors;
     }
     pub fn new<B: Backend>(renderer: &mut Renderer<B>, config: &Config) -> Self {
         let tex_id = renderer.load_texture({
@@ -398,7 +429,6 @@ impl GameState {
         };
         let mut state = GameState {
             my_doors: world.room.random_new_my_doors(&mut local_rng),
-            currently_inside_doors: Default::default(),
             net,
             world,
             pressing_state: Default::default(),

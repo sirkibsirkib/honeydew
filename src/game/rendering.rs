@@ -122,7 +122,7 @@ impl GameState {
         renderer.write_vertex_buffer(INSTANCE_RANGE_WALLS.start, iter);
     }
     fn update_my_door_transforms<B: Backend>(&self, renderer: &mut Renderer<B>) {
-        let iter = self.my_doors.iter().map(|&MyDoor { dim, coord }| {
+        let iter = self.my_doors.iter().map(|&MyDoor { dim, coord, .. }| {
             Mat4::from_translation(GameState::wall_pos(coord, dim).to_vec2().extend(0.)) // ABOVE WALLS
                 * Mat4::from_scale(WALL_SIZE[dim].to_vec2().extend(1.))
         });

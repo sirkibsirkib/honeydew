@@ -1,3 +1,4 @@
+use core::ops::Sub;
 use {
     crate::{
         bit_set::{self, BitIndex, BitIndexSet},

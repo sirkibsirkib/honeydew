@@ -175,7 +175,7 @@ impl Server {
         &mut self,
         my_color: PlayerColor,
         entities: &mut Entities,
-        mut new_connection_callback: impl FnMut(PlayerColor, &mut Player),
+        mut new_client_callback: impl FnMut(PlayerColor, &mut Entities),
     ) {
         // I am the server!
         let peer_colors = std::array::IntoIter::new(my_color.predator_prey());
@@ -203,7 +203,7 @@ impl Server {
                                         addr: sender_addr,
                                         last_client_timestamp: timestamp,
                                     });
-                                    new_connection_callback(color, &mut entities.players[color]);
+                                    new_client_callback(color, entities);
                                     color
                                 })
                         });
