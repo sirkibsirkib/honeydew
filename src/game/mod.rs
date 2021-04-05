@@ -6,7 +6,7 @@ pub mod room;
 
 use {
     crate::{prelude::*, rng::Rng},
-    ai::{Ai, AiExt, SinkAi},
+    ai::{Ai, AiExt, MiniMaxAi},
     config::{Config, InputConfig},
     gfx_2020::{gfx_hal::Backend, winit::event::ElementState, *},
     net::{Client, Server},
@@ -33,6 +33,10 @@ pub const NUM_PLAYERS: u32 = 3;
 pub const MAX_WALLS: u32 = TOT_CELL_COUNT as u32 * 2;
 pub const NUM_MY_DOORS: u32 = MAX_WALLS as u32 / 64;
 
+trait PlayerArrExt<T> {
+    fn new_with<F: FnMut(PlayerColor) -> T>(func: F) -> Self;
+}
+
 /////////////////////////////////
 
 pub type Pos = DimMap<WrapInt>;
@@ -52,7 +56,7 @@ pub struct MyDoor {
 }
 
 pub enum Net {
-    Server { server: Server, ais: PlayerArr<Option<SinkAi>> },
+    Server { server: Server, ais: PlayerArr<Option<MiniMaxAi>> },
     Client(Client),
 }
 
@@ -144,6 +148,7 @@ impl Into<usize> for PlayerColor {
     }
 }
 impl PlayerColor {
+    pub const ALL: [Self; 3] = [Self::Black, Self::Blue, Self::Orange];
     pub fn predator_prey(self) -> [Self; 2] {
         [self.predator(), self.prey()]
     }
@@ -401,7 +406,7 @@ impl GameState {
             let mut ais = PlayerArr::<Option<_>>::default();
             for &col in config.if_server.ai_enabled.iter() {
                 if ais[col].is_none() && col != controlling {
-                    ais[col] = Some(SinkAi::new(col, &world, &mut local_rng));
+                    ais[col] = Some(MiniMaxAi::new(col, &world, &mut local_rng));
                 }
             }
             let net = Net::Server { server, ais };
@@ -502,6 +507,11 @@ impl<T> Index<PlayerColor> for PlayerArr<T> {
 impl<T> IndexMut<PlayerColor> for PlayerArr<T> {
     fn index_mut(&mut self, idx: PlayerColor) -> &mut T {
         &mut self[Into::<usize>::into(idx)]
+    }
+}
+impl<T> PlayerArrExt<T> for PlayerArr<T> {
+    fn new_with<F: FnMut(PlayerColor) -> T>(mut func: F) -> Self {
+        [func(PlayerColor::ALL[0]), func(PlayerColor::ALL[1]), func(PlayerColor::ALL[2])]
     }
 }
 

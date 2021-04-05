@@ -904,6 +904,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "fastrand",
+ "fnv",
  "gfx-backend-dx11",
  "gfx-backend-dx12",
  "gfx-backend-gl",

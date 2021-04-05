@@ -6,7 +6,7 @@ is the use of constant generics, to make INDICES a type parameter.
 */
 pub const INDICES: u16 = crate::game::room::TOT_CELL_COUNT;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Hash, Ord, PartialOrd, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct BitIndex(pub(crate) u16); // invariant: < INDICES
 
 pub struct BitIndexSet {
@@ -73,7 +73,11 @@ impl core::iter::FromIterator<BitIndex> for BitIndexSet {
 }
 
 impl BitIndex {
-    #[inline]
+    pub const DOMAIN_SIZE: u16 = INDICES;
+    // #[inline]
+    // pub fn iter_larger(self) -> impl Iterator<Item = Self> {
+    //     (self.0 + 1..INDICES).map(Self)
+    // }
     fn split(self) -> SplitBitIndex {
         SplitBitIndex {
             idx_of: (self.0 / BitIndexSet::WORD_SIZE) as usize,

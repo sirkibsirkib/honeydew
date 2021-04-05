@@ -1,24 +1,21 @@
+use crate::game::{PlayerArr, PlayerArrExt};
 use {
     crate::{
         bit_set::{BitIndex, FullBitIndexMap, INDICES},
-        game::{rendering::VIEW_SIZE, Coord, PlayerColor, Room, World, PLAYER_SIZE, ZERO_POS},
+        game::{
+            rendering::VIEW_SIZE,
+            room::{Coord, Room, ShortestPaths},
+            PlayerColor, World, PLAYER_SIZE, ZERO_POS,
+        },
         prelude::*,
     },
-    std::collections::{HashMap, VecDeque},
+    std::collections::VecDeque,
 };
 
-////////////////////////////////////////////////////////////
-// #[derive(Debug)]
-// pub struct BeelineAi {
-//     // Makes a beeline for its prey through the maze,
-//     // ignoring everything else
-//     my_color: PlayerColor, // final
-//     prey_to_me: Vec<Coord>,
-//     prey_at_guess: Coord,
-// }
-
-struct ShortestPaths {
-    map: HashMap<[Coord; 2], u16>,
+pub struct PathLengthsAi {
+    my_color: PlayerColor,
+    sp: ShortestPaths,
+    next_step: Coord,
 }
 
 #[derive(Debug)]
@@ -50,9 +47,6 @@ fn diff_to_vel(diff: Pos) -> Vel {
     }
     vel
 }
-// fn form_a_line([a, b, c]: [Pos; 3]) -> bool {
-//     Dim::iter_domain().any(|dim| a[dim] == b[dim] && b[dim] == c[dim])
-// }
 fn coord_dist([a, b]: [Coord; 2]) -> Size {
     (a.corner_pos() - b.corner_pos()).distances_from_zero()
 }
@@ -62,104 +56,6 @@ fn pos_of_player(world: &World, color: PlayerColor) -> Pos {
 fn coord_of_player(world: &World, color: PlayerColor) -> Coord {
     Coord::from_pos_flooring(pos_of_player(world, color))
 }
-// fn dir_to_vel(dir: Direction) -> Vel {
-//     let mut vel = Vel::default();
-//     vel[dir.dim()] = Some(dir.sign());
-//     vel
-// }
-// impl AiExt for BeelineAi {
-//     fn new(my_color: PlayerColor, rng: &mut Rng) -> Box<dyn Ai> {
-//         Box::new(Self { prey_to_me: vec![], my_color, prey_at_guess: Coord::random(rng) })
-//     }
-// }
-// impl Ai for BeelineAi {
-//     fn i_was_moved(&mut self) {
-//         self.prey_to_me.clear();
-//     }
-//     fn update(&mut self, world: &World, rng: &mut Rng) -> Vel {
-//         if rng.gen_bits(self.prey_to_me.len().min(11) as u8 + 2) == 0 {
-//             self.remodel(world, rng);
-//         }
-//         let me_at = world.entities.players[self.my_color].pos;
-//         while let Some(coord) = self.prey_to_me.last() {
-//             let dest = coord.center_pos();
-//             let diff = dest - me_at;
-//             if diff == ZERO_POS {
-//                 // consider this coord reached. move toward the next!
-//                 self.prey_to_me.pop();
-//             } else {
-//                 // have not yet reached this coord. move toward it!
-//                 return diff_to_vel(diff);
-//             }
-//         }
-//         // nowhere to go
-//         Vel::default()
-//     }
-// }
-// impl BeelineAi {
-//     #[inline]
-//     fn update_prey_at_guess(&mut self, world: &World, rng: &mut Rng) {
-//         let me_at = coord_of_player(world, self.my_color);
-//         let prey_color = self.my_color.prey();
-//         if coord_dist([coord_of_player(world, prey_color), me_at])
-//             < VIEW_SIZE + PLAYER_SIZE.scalar_div(2)
-//         {
-//             // You're close => I can see you
-//             self.prey_at_guess = coord_of_player(world, prey_color);
-//         } else if coord_dist([self.prey_at_guess, me_at]) < VIEW_SIZE.scalar_div(2) {
-//             // You're not close, but I am close to where I guessed => you're NOT here
-//             self.prey_at_guess = Coord::random(rng);
-//         }
-//     }
-//     fn remodel(&mut self, world: &World, rng: &mut Rng) {
-//         // FOR NOW: just beeline for my prey
-//         // 1. where am I?
-//         let me_at = coord_of_player(world, self.my_color);
-//         // 2. update my views of other players
-//         self.update_prey_at_guess(world, rng);
-//         // build path of coords from prey to me.
-//         self.prey_to_me.clear();
-//         // find shortest route from me_at to prey_at
-//         let towards_me = {
-//             // BFS from me_at to to prey_at
-//             let mut towards_me =
-//                 HashMap::<Coord, Direction>::with_capacity(TOT_CELL_COUNT as usize);
-//             let mut bfs_queue = std::collections::VecDeque::with_capacity(TOT_CELL_COUNT as usize);
-//             let mut at = me_at;
-//             bfs_queue.push_back(at);
-//             while at != self.prey_at_guess {
-//                 for step_dir in Direction::iter_domain() {
-//                     if let Some(dest) = at.stepped_in_room(&world.room, step_dir) {
-//                         // coord C visited IFF towards_prey maps key C
-//                         towards_me.entry(dest).or_insert_with(|| {
-//                             bfs_queue.push_back(dest);
-//                             -step_dir
-//                         });
-//                     }
-//                 }
-//                 at = bfs_queue.pop_front().unwrap();
-//             }
-//             towards_me
-//         };
-//         let mut at = self.prey_at_guess;
-//         loop {
-//             self.prey_to_me.push(at);
-//             if at == me_at {
-//                 if let [.., a, b] = self.prey_to_me.as_slice() {
-//                     if form_a_line([
-//                         a.center_pos(),
-//                         b.center_pos(),
-//                         world.entities.players[self.my_color].pos,
-//                     ]) {
-//                         self.prey_to_me.pop();
-//                     }
-//                 };
-//                 break;
-//             }
-//             at = at.stepped(towards_me[&at]);
-//         }
-//     }
-// }
 impl AiExt for SinkAi {
     fn new(my_color: PlayerColor, world: &World, _rng: &mut Rng) -> Self {
         let me_at = coord_of_player(world, my_color);
@@ -258,19 +154,11 @@ impl SinkAi {
         let me_at = coord_of_player(world, self.my_color);
         let bi = me_at.bit_index();
         self.goal = if self.sink_to_prey[bi] <= self.sink_to_predator[bi] {
-            // hunting prey
-            // println!("hunting prey");
             Self::sink_toward(me_at, &world.room, &self.sink_to_prey)
         } else {
-            // fleeing predator
-            // println!("fleeing predator");
             if self.sink_to_teleporters[bi] < self.sink_to_predator[bi] {
-                // I can make it!
-                // println!("... to teleporter");
                 Self::sink_toward(me_at, &world.room, &self.sink_to_teleporters)
             } else {
-                // I can't make it!
-                // println!("... away");
                 Self::sink_away(me_at, &world.room, &self.sink_to_predator)
             }
         };
@@ -308,75 +196,190 @@ impl SinkAi {
     }
 }
 
-// fn whose_turn(my_color: PlayerColor, depth: usize) -> PlayerColor {
-//     match depth % 3 {
-//         0 => my_color,
-//         1 => my_color.prey(),
-//         2 | _ => my_color.predator(),
-//     }
-// }
-// fn first_dir() -> Direction {
-//     Direction::Up
-// }
-// fn next_dir_if_possible(dir: Direction) -> Option<Direction> {
-//     Some(match dir {
-//         Up => Down,
-//         Down => Left,
-//         Left => Right,
-//         Right => return None,
-//     })
-// }
+impl Ai for PathLengthsAi {
+    fn update(&mut self, world: &World, _rng: &mut Rng) -> Vel {
+        let my_pos = pos_of_player(world, self.my_color);
+        let already_at_next_step = { my_pos == self.next_step.center_pos() };
+        if already_at_next_step {
+            let me_bi = self.next_step.bit_index();
+            let goal = self.new_goal(world);
+            let goal_bi = goal.bit_index();
+            let dist_to_goal = self.sp.coord_pair_path_dist([me_bi, goal_bi]).unwrap();
+            self.next_step = Direction::iter_domain()
+                .filter_map(|dir| self.next_step.stepped_in_room(&world.room, dir))
+                .find(|closer_maybe| {
+                    let dist_here =
+                        self.sp.coord_pair_path_dist([closer_maybe.bit_index(), goal_bi]).unwrap();
+                    dist_here == dist_to_goal - 1
+                })
+                .unwrap_or(self.next_step);
+        }
+        diff_to_vel(self.next_step.center_pos() - my_pos)
+    }
+    fn i_was_moved(&mut self, world: &World) {
+        let me_at = coord_of_player(world, self.my_color);
+        self.next_step = me_at;
+    }
+}
+impl AiExt for PathLengthsAi {
+    fn new(my_color: PlayerColor, world: &World, _rng: &mut Rng) -> Self {
+        Self {
+            next_step: coord_of_player(world, my_color),
+            sp: ShortestPaths::new(&world.room),
+            my_color,
+        }
+    }
+}
+impl PathLengthsAi {
+    fn new_goal(&self, world: &World) -> Coord {
+        let pair_dist = move |pair: [BitIndex; 2]| {
+            self.sp.coord_pair_path_dist(pair).map(|x| x as i32).unwrap_or(i32::MAX)
+        };
+        let tele_bit_indices = [
+            //  ok
+            Coord::from_pos_flooring(world.entities.teleporters[0]).bit_index(),
+            // Coord::from_pos_flooring(world.entities.teleporters[1]).bit_index(),
+            // Coord::from_pos_flooring(world.entities.teleporters[2]).bit_index(),
+            // Coord::from_pos_flooring(world.entities.teleporters[3]).bit_index(),
+        ];
+        let tele_dist_at = move |bi: BitIndex| {
+            tele_bit_indices
+                .iter()
+                .map(move |&tele_bi| {
+                    self.sp
+                        .coord_pair_path_dist([bi, tele_bi])
+                        .map(|x| x as i32)
+                        .unwrap_or(i32::MAX)
+                })
+                .min()
+                .unwrap()
+        };
+        let me_bi = coord_of_player(world, self.my_color).bit_index();
+        let prey_bi = coord_of_player(world, self.my_color.prey()).bit_index();
+        // let prey_to_tele_dist = tele_dist_at(prey_bi);
+        let pred_bi = coord_of_player(world, self.my_color.predator()).bit_index();
+        let h_val_of = move |test_bi| {
+            let tele_dist = tele_dist_at(test_bi);
+            let pred_dist = pair_dist([test_bi, pred_bi]);
+            let prey_dist = pair_dist([test_bi, prey_bi]);
+            let my_dist = pair_dist([test_bi, me_bi]);
+            pred_dist * 2 - prey_dist * 2 - my_dist - tele_dist
+        };
+        // consider every coordinate in the room.
+        BitIndex::iter_domain() //
+            .max_by_key(|&bi| h_val_of(bi))
+            .map(Coord::from_bit_index)
+            .unwrap()
+    }
+}
 
-// struct DistLookup {}
-// impl DistLookup {
-//     fn dist(&self, [a, b]: [Coord; 2]) -> u16 {
-//         todo!()
-//     }
-// }
-
-// struct RecRet {
-//     dist_to_preys: PlayerDists,
-//     next_step: Option<Direction>,
-// }
-// type PlayerDists = PlayerArr<u16>;
-// fn minimax(
-//     dist_lookup: &DistLookup,
-//     world: &World,
-//     coords: PlayerArr<Coord>,
-//     col: PlayerColor,
-//     depth_to_go: u8,
-// ) -> RecRet {
-//     let mut best = RecRet {
-//         next_step: None,
-//         dist_to_preys: [
-//             dist_lookup.dist([coords[col], coords[col.prey()]]),
-//             dist_lookup.dist([coords[col.prey()], coords[col.predator()]]),
-//             dist_lookup.dist([coords[col.predator()], coords[col]]),
-//         ],
-//     };
-//     let dist_h = |dist_to_preys: &PlayerDists| {
-//         dist_to_preys[col] as i32 - dist_to_preys[col.predator()] as i32
-//     };
-//     let mut update = |dist_to_preys: PlayerDists, next_step: Direction| {
-//         if dist_h(&dist_to_preys) > dist_h(&best.dist_to_preys) {
-//             best.dist_to_preys = dist_to_preys;
-//             best.next_step = Some(next_step);
-//         }
-//     };
-//     for dir in Direction::iter_domain() {
-//         if let Some(dest) = coords[my_color].stepped_in_room(&world.room, dir) {
-//             // overwrite player dists for my_color<->my_color.prey() and my_color<->my_color.predator()
-
-//             coords[my_color] = dest;
-//             if coords[my_color] == coords[my_color.prey()] {
-//                 return RecRet { heuristics: i8::MAX, dir };
-//             } else if coords[my_color] == coords[my_color.predator()] {
-//                 update(RecRet { dir, heuristic: i8::MIN + 1 });
-//             } else if let Some(new_depth) = depth_to_go.checked_sub(1) {
-//                 // deeper
-//                 update(minimax(dist_lookup, world, coords, my_color.prey(), new_depth));
-//             }
-//         }
-//     }
-//     best
-// }
+pub struct MiniMaxAi {
+    my_color: PlayerColor,
+    next_step: Coord,
+    sp: ShortestPaths,
+}
+impl Ai for MiniMaxAi {
+    fn update(&mut self, world: &World, _rng: &mut Rng) -> Vel {
+        let my_pos = pos_of_player(world, self.my_color);
+        let already_at_next_step = { my_pos == self.next_step.center_pos() };
+        if already_at_next_step {
+            let at = self.next_step;
+            let me_bi = self.next_step.bit_index();
+            let goal = {
+                let coords = PlayerArr::new_with(|col| coord_of_player(world, col));
+                let ret = q_rec(&self.sp, world, self.my_color, coords, 3 * 3);
+                ret.next_dir.map(|dir| at.stepped(dir)).unwrap_or(at)
+            };
+            let goal_bi = goal.bit_index();
+            let dist_to_goal = self.sp.coord_pair_path_dist([me_bi, goal_bi]).unwrap();
+            self.next_step = Direction::iter_domain()
+                .filter_map(|dir| at.stepped_in_room(&world.room, dir))
+                .find(|closer_maybe| {
+                    let dist_here =
+                        self.sp.coord_pair_path_dist([closer_maybe.bit_index(), goal_bi]).unwrap();
+                    dist_here == dist_to_goal - 1
+                })
+                .unwrap_or(self.next_step);
+        }
+        diff_to_vel(self.next_step.center_pos() - my_pos)
+    }
+    fn i_was_moved(&mut self, world: &World) {
+        let me_at = coord_of_player(world, self.my_color);
+        self.next_step = me_at;
+    }
+}
+impl AiExt for MiniMaxAi {
+    fn new(my_color: PlayerColor, world: &World, _rng: &mut Rng) -> Self {
+        Self {
+            next_step: coord_of_player(world, my_color),
+            sp: ShortestPaths::new(&world.room),
+            my_color,
+        }
+    }
+}
+struct Ret {
+    next_dir: Option<Direction>,
+    end_up: PlayerArr<Coord>,
+}
+fn q_rec(
+    sp: &ShortestPaths,
+    world: &World,
+    me: PlayerColor,
+    coords: PlayerArr<Coord>,
+    depth_to_go: u8,
+) -> Ret {
+    if let Some(deeper_depth) = depth_to_go.checked_sub(1) {
+        // recursive case
+        let at_tele = move |coord| {
+            world.entities.teleporters.iter().any(|&pos| Coord::from_pos_flooring(pos) == coord)
+        };
+        let mut best = q_rec(sp, world, me.prey(), coords, deeper_depth);
+        for dir in Direction::iter_domain() {
+            if let Some(dest) = coords[me].stepped_in_room(&world.room, dir) {
+                let mut new_coords = coords;
+                new_coords[me] = dest;
+                let cannot_continue = new_coords[me] == new_coords[me.prey()]
+                    || new_coords[me] == new_coords[me.predator()]
+                    || world
+                        .entities
+                        .teleporters
+                        .iter()
+                        .any(|&pos| Coord::from_pos_flooring(pos) == new_coords[me]);
+                let new_end_up = if cannot_continue {
+                    new_coords
+                } else {
+                    // recursive call
+                    q_rec(sp, world, me.prey(), new_coords, deeper_depth).end_up
+                };
+                let new_best = {
+                    let h_value = move |end_up: &PlayerArr<Coord>| {
+                        if at_tele(end_up[me]) {
+                            0
+                        } else {
+                            let me_bi = end_up[me].bit_index();
+                            const AVG_DIST: u16 = 15;
+                            let col_dist = |col: PlayerColor| {
+                                if at_tele(end_up[col]) {
+                                    AVG_DIST
+                                } else {
+                                    sp.coord_pair_path_dist([me_bi, end_up[col].bit_index()])
+                                        .unwrap()
+                                }
+                            };
+                            col_dist(me.predator()) - col_dist(me.prey())
+                        }
+                    };
+                    h_value(&new_end_up) > h_value(&best.end_up)
+                };
+                if new_best {
+                    best.next_dir = Some(dir);
+                    best.end_up = new_end_up;
+                }
+            }
+        }
+        best
+    } else {
+        // stop condition
+        Ret { end_up: coords, next_dir: None }
+    }
+}

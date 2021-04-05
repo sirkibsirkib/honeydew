@@ -6,6 +6,7 @@ use {
         Dim,
     },
     core::ops::Neg,
+    fnv::FnvHashMap,
 };
 
 pub const ROOM_SIZE: DimMap<u32> = DimMap::new([WrapInt::DOMAIN_SIZE; 2]);
@@ -37,6 +38,9 @@ struct IncompleteRoom {
 struct CrossesWallInfo {
     dim: Dim,
     managed_by_src: bool,
+}
+pub struct ShortestPaths {
+    map: FnvHashMap<[BitIndex; 2], u16>,
 }
 
 /////////////////////
@@ -229,5 +233,51 @@ impl std::fmt::Debug for Coord {
         )
         .arr
         .fmt(f)
+    }
+}
+
+impl ShortestPaths {
+    fn ordered_key([a, b]: [BitIndex; 2]) -> [BitIndex; 2] {
+        return if a <= b { [a, b] } else { [b, a] };
+    }
+    #[inline]
+    pub fn coord_pair_path_dist(&self, pair: [BitIndex; 2]) -> Option<u16> {
+        self.map.get(&Self::ordered_key(pair)).copied()
+    }
+    pub fn new(room: &Room) -> Self {
+        // floyd-warshall algorithm
+        let mut map = FnvHashMap::default();
+        for i in BitIndex::iter_domain() {
+            // 1. 0 distance from coord to itself
+            map.insert([i, i], 0);
+
+            // 2. 1 distance from coord to its neighbor IF we can step that way
+            let neighbor_bit_index_iter = [Right, Down]
+                .iter()
+                .filter_map(|&dir| Coord::from_bit_index(i).stepped_in_room(room, dir))
+                .map(Coord::bit_index);
+            for j in neighbor_bit_index_iter {
+                let key = Self::ordered_key([i, j]);
+                map.insert(key, 1);
+            }
+        }
+        // 3. incrementally shorten path between pairs ij via k
+        for k in BitIndex::iter_domain() {
+            for i in BitIndex::iter_domain() {
+                for j in BitIndex::iter_domain() {
+                    // if (dist(ik) + dist(kj))   <   dist(ij), update dist(ij) accordingly
+                    // intuitively: shortest path between ij updated to reflect route i->k->j
+                    let lookup = |a, b| map.get(&Self::ordered_key([a, b])).copied();
+                    if let [Some(d_ik), Some(d_kj)] = [lookup(i, k), lookup(k, j)] {
+                        let via_k = d_ik + d_kj;
+                        if lookup(i, j).map(|d_ij| via_k < d_ij).unwrap_or(true) {
+                            map.insert(Self::ordered_key([i, j]), via_k);
+                        }
+                    }
+                }
+            }
+        }
+        map.shrink_to_fit();
+        Self { map }
     }
 }

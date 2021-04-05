@@ -1,6 +1,10 @@
 use {
     crate::{prelude::*, rng::Rng},
     core::ops::{Add, Div, Mul, Neg, Not, Sub},
+    serde::{
+        de::{self, Deserializer},
+        ser::Serializer,
+    },
 };
 ////////////////////////////////
 
@@ -27,7 +31,7 @@ pub enum Sign {
     Negative,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug, Copy, Clone, Default, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Hash, Debug, Copy, Clone, Default)]
 pub struct DimMap<T> {
     pub arr: [T; 2],
 }
@@ -228,5 +232,56 @@ impl<T: PartialOrd> PartialOrd for DimMap<T> {
             [Some(Ordering::Equal), o] | [o, Some(Ordering::Equal)] => o,
             _ => None,
         }
+    }
+}
+
+impl Serialize for Pos {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.arr.serialize(s)
+    }
+}
+impl<'de> Deserialize<'de> for Pos {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(Self { arr: Deserialize::deserialize(d)? })
+    }
+}
+impl Serialize for Vel {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let flatten = |t: Option<Sign>| match t {
+            None => 0u8,
+            Some(Positive) => 1u8,
+            Some(Negative) => 2u8,
+        };
+        let arr = [flatten(self[X]), flatten(self[Y])];
+        arr.serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Vel {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let try_unflatten = |t: u8| {
+            use de::Error;
+            Ok(match t {
+                0u8 => None,
+                1u8 => Some(Positive),
+                2u8 => Some(Negative),
+                x => {
+                    // struct
+                    let unexpected = de::Unexpected::Unsigned(x as u64);
+                    struct T;
+                    impl de::Expected for T {
+                        fn fmt(
+                            &self,
+                            f: &mut std::fmt::Formatter<'_>,
+                        ) -> Result<(), std::fmt::Error> {
+                            write!(f, "0..3")
+                        }
+                    }
+                    return Err(D::Error::invalid_value(unexpected, &T));
+                }
+            })
+        };
+        let arr = <[u8; 2]>::deserialize(d)?;
+        Ok(Self { arr: [try_unflatten(arr[0])?, try_unflatten(arr[1])?] })
     }
 }

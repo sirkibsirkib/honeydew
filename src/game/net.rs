@@ -24,36 +24,50 @@ struct Io {
 
 pub struct Client {
     io: Io, // nonblocking && bound && connected
-    last_server_timestamp: Timestamp,
-    my_timestamp: Timestamp,
+    server_ts: Timestamp,
+    client_ts: Timestamp,
 }
 
 pub struct Server {
     io: Io, // nonblocking && bound
     clients: PlayerArr<Option<ServerClient>>,
     room_seed: u64,
-    my_timestamp: Timestamp,
+    server_ts: Timestamp,
 }
 struct ServerClient {
     addr: SocketAddr,
-    last_client_timestamp: Timestamp,
+    client_ts: Timestamp,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct TimelyGameData<'a> {
+struct StcTimelyData<'a> {
     entities: Cow<'a, Entities>,
-    timestamp: Timestamp,
+    server_ts: Timestamp,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 enum Msg<'a> {
-    CtsHello { preferred_color: PlayerColor },
-    StcHello { timely: TimelyGameData<'a>, your_color: PlayerColor, room_seed: u64 },
-    CtsUpdate { player: Player, timestamp: WrapInt },
-    StcUpdate { timely: TimelyGameData<'a> },
+    CtsHello {
+        client_ts: Timestamp,
+        preferred_color: PlayerColor,
+    },
+    StcHello {
+        server_ts: Timestamp,
+        room_seed: u64,
+        server_entities: Cow<'a, Entities>,
+        your_color: PlayerColor,
+    },
+    CtsUpdate {
+        player: Player,
+        client_ts: Timestamp,
+    },
+    StcUpdate {
+        server_ts: Timestamp,
+        server_entities: Cow<'a, Entities>,
+    },
 }
 
-const ACCEPTED_CLIENT_MOVE: Size = MOVE_SIZE.scalar_mul(12);
+const ACCEPTED_CLIENT_MOVE: Size = MOVE_SIZE.scalar_mul(20);
 
 //////////////////////////////////////////////////////////////////////
 fn bincode_config() -> impl bincode::config::Options {
@@ -100,33 +114,32 @@ impl Client {
     pub fn new(config: &IfClient) -> (Self, World, PlayerColor) {
         let mut io = Io::new(SocketAddrV4::new(std::net::Ipv4Addr::UNSPECIFIED, 0).into())
             .connected(config.server_addr.into());
-        let hello = Msg::CtsHello { preferred_color: config.preferred_color };
+        let client_ts = Timestamp::default();
+        let preferred_color = config.preferred_color;
+        let hello = Msg::CtsHello { preferred_color, client_ts };
         loop {
             io.with_staged_msg(&hello, |bytes, udp| {
                 udp.send(bytes).unwrap();
             });
-            if let Some(Msg::StcHello { timely, your_color, room_seed }) = Self::recv(&mut io) {
-                let TimelyGameData { entities, timestamp } = timely;
+            if let Some(Msg::StcHello { server_entities, server_ts, your_color, room_seed }) =
+                Self::recv(&mut io)
+            {
                 let (room, _rng) = Room::new_seeded(room_seed);
-                let world = World { room, entities: entities.into_owned() };
-                let me = Self {
-                    io: io.nonblocking(),
-                    last_server_timestamp: timestamp,
-                    my_timestamp: Timestamp::default(),
-                };
+                let world = World { room, entities: server_entities.into_owned() };
+                let me = Self { io: io.nonblocking(), server_ts, client_ts };
                 return (me, world, your_color);
             }
         }
     }
     pub fn update(&mut self, my_color: PlayerColor, entities: &mut Entities) {
         // handle all incoming server update messages in the correct order
-        while let Some(Msg::StcUpdate { timely }) = Self::recv(&mut self.io) {
-            if self.last_server_timestamp < timely.timestamp {
+        while let Some(Msg::StcUpdate { server_ts, server_entities }) = Self::recv(&mut self.io) {
+            if self.server_ts < server_ts {
                 // new info!
-                self.last_server_timestamp = timely.timestamp;
+                self.server_ts = server_ts;
                 // overwrite all entity data except my own
                 let my_old = entities.players[my_color].clone();
-                *entities = timely.entities.into_owned();
+                *entities = server_entities.into_owned();
                 let my_new = &mut entities.players[my_color];
                 // ... but not my velocity (mine is always accurate)
                 my_new.vel = my_old.vel;
@@ -140,13 +153,13 @@ impl Client {
         }
         // update the server!
         let update_msg = Msg::CtsUpdate {
-            timestamp: self.my_timestamp,
+            client_ts: self.client_ts,
             player: entities.players[my_color].clone(),
         };
         self.io.with_staged_msg(&update_msg, |bytes, udp| {
             udp.send(bytes).unwrap();
         });
-        self.my_timestamp += 1u16;
+        self.client_ts += 1u16;
     }
 }
 impl Server {
@@ -159,7 +172,7 @@ impl Server {
             io: Io::new(config.server_addr.into()).nonblocking(),
             room_seed,
             clients: Default::default(),
-            my_timestamp: Timestamp::default(),
+            server_ts: Timestamp::default(),
         };
         (me, world, config.player_color)
     }
@@ -181,9 +194,9 @@ impl Server {
         let peer_colors = std::array::IntoIter::new(my_color.predator_prey());
         while let Some((msg, sender_addr)) = self.recv_from() {
             match msg {
-                Msg::CtsHello { preferred_color } => {
+                Msg::CtsHello { preferred_color, client_ts } => {
                     // what color is the sender's player?
-                    let timestamp = self.my_timestamp;
+                    let server_ts = self.server_ts;
                     let your_color = PlayerColor::iter_domain()
                         // try 1: the color of a client with the sender's addr
                         .find(|&color| {
@@ -199,10 +212,8 @@ impl Server {
                             ArrIter::new(choices)
                                 .find(|&color| color != my_color && self.clients[color].is_none())
                                 .map(|color| {
-                                    self.clients[color] = Some(ServerClient {
-                                        addr: sender_addr,
-                                        last_client_timestamp: timestamp,
-                                    });
+                                    self.clients[color] =
+                                        Some(ServerClient { addr: sender_addr, client_ts });
                                     new_client_callback(color, entities);
                                     color
                                 })
@@ -212,10 +223,8 @@ impl Server {
                         let hello = Msg::StcHello {
                             your_color,
                             room_seed: self.room_seed,
-                            timely: TimelyGameData {
-                                entities: Cow::Borrowed(entities),
-                                timestamp: self.my_timestamp,
-                            },
+                            server_entities: Cow::Borrowed(entities),
+                            server_ts: self.server_ts,
                         };
                         self.io.with_staged_msg(&hello, |bytes, udp| {
                             udp.send_to(bytes, sender_addr).unwrap();
@@ -224,12 +233,12 @@ impl Server {
                         // sorry, cannot support a new player/color
                     }
                 }
-                Msg::CtsUpdate { player, timestamp } => {
+                Msg::CtsUpdate { player, client_ts } => {
                     'find_player: for color in peer_colors.clone() {
                         if let Some(client) = &mut self.clients[color] {
                             if client.addr == sender_addr {
                                 // found them!
-                                if client.last_client_timestamp < timestamp {
+                                if client.client_ts < client_ts {
                                     // update player data with newer info!
                                     let curr_player = &mut entities.players[color];
                                     // server accepts SMALL STEPS, ignores LARGE JUMPS
@@ -239,7 +248,7 @@ impl Server {
                                         curr_player.pos = player.pos;
                                     }
                                     curr_player.vel = player.vel;
-                                    client.last_client_timestamp = timestamp;
+                                    client.client_ts = client_ts;
                                 }
                                 break 'find_player;
                             }
@@ -250,12 +259,8 @@ impl Server {
             }
         }
         // update all clients!
-        let update_msg = Msg::StcUpdate {
-            timely: TimelyGameData {
-                entities: Cow::Borrowed(entities),
-                timestamp: self.my_timestamp,
-            },
-        };
+        let update_msg =
+            Msg::StcUpdate { server_entities: Cow::Borrowed(entities), server_ts: self.server_ts };
         let Self { clients, io, .. } = self;
         io.with_staged_msg(&update_msg, |bytes, udp| {
             for color in peer_colors {
@@ -264,6 +269,6 @@ impl Server {
                 }
             }
         });
-        self.my_timestamp += 1u16;
+        self.server_ts += 1u16;
     }
 }
